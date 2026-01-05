@@ -32,11 +32,26 @@ fn run_cmd(cmd: &mut std::process::Command) {
 /// Download a tarball by url to `dst` using curl or wget.
 fn download_to(url: &str, dst: &Path) {
     if dst.exists() {
-        return;
+        // Verify file is valid (at least a minimal tarball, not an error page)
+        let metadata = match std::fs::metadata(dst) {
+            Ok(m) => m,
+            Err(_) => {
+                std::fs::remove_file(dst).ok();
+                return;
+            }
+        };
+        // If file is suspiciously small (< 1KB), it's probably an error page; re-download
+        if metadata.len() < 1024 {
+            eprintln!("Warning: {} is suspiciously small ({}B), re-downloading", dst.display(), metadata.len());
+            std::fs::remove_file(dst).ok();
+        } else {
+            return;
+        }
     }
     eprintln!("Downloading {} to {}", url, dst.display());
     let downloaded = if std::process::Command::new("curl")
         .arg("-L")
+        .arg("--fail")  // Fail on HTTP errors
         .arg("-o")
         .arg(dst)
         .arg(url)
@@ -55,7 +70,8 @@ fn download_to(url: &str, dst: &Path) {
             .unwrap_or(false)
     };
     if !downloaded {
-        panic!("failed to download {}. Please install curl or wget.", url);
+        std::fs::remove_file(dst).ok();
+        panic!("failed to download {}. Please install curl or wget and check internet connection.", url);
     }
 }
 
@@ -324,8 +340,8 @@ fn vendor_core_deps(out_dir: &Path) -> bool {
         ),
         (
             "harfbuzz",
-            "harfbuzz-4.8.0.tar.xz",
-            "https://www.freedesktop.org/software/harfbuzz/release/harfbuzz-4.8.0.tar.xz",
+            "harfbuzz-2.9.1.tar.xz",
+            "https://github.com/harfbuzz/harfbuzz/releases/download/2.9.1/harfbuzz-2.9.1.tar.xz",
             &["-Ddefault_library=static", "-Ddocs=false"],
         ),
         (
