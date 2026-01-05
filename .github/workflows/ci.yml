@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-macos-amd64:
+    name: Build macOS (amd64)
+    runs-on: macos-latest
+    env:
+      TARGET: x86_64-apple-darwin
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install dependencies
+        run: brew install cairo pango fontconfig pkg-config
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Cache cargo registry
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+      - name: Add target
+        run: rustup target add $TARGET
+      - name: Build (release for $TARGET)
+        run: cargo build --workspace --all-features --release --target $TARGET
+      - name: Note about tests
+        run: |
+          echo "Cross-compiling for $TARGET; running tests for the build target is not supported on this runner."
+
+  build-macos-arm64:
+    name: Build macOS (arm64)
+    # This job targets a macOS arm64 runner (macos-latest is arm64).
+    runs-on: macos-latest
+    env:
+      TARGET: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install dependencies
+        run: brew install cairo pango fontconfig pkg-config
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Add target (aarch64)
+        run: rustup target add $TARGET || true
+      - name: Build (release for host)
+        # Build for the native host architecture; explicit target available as $TARGET
+        run: cargo build --workspace --all-features --release --target $TARGET
+      - name: Run tests (host)
+        # Tests run on the runner for the host arch
+        run: cargo test --workspace --all-features --no-fail-fast
+
+  build-ubuntu:
+    name: Build Ubuntu (amd64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev libpango1.0-dev libfontconfig1-dev pkg-config
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install system deps
+        run: |
+          sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev clang
+      - name: Build (release)
+        run: cargo build --workspace --all-features --release
+      - name: Run tests
+        run: cargo test --workspace --all-features --no-fail-fast
+
+  coverage-tarpaulin:
+    name: Coverage (tarpaulin) -> Codecov
+    runs-on: ubuntu-latest
+    needs: build-ubuntu
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Install system deps for tarpaulin
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev clang llvm
+      - name: Install cargo-tarpaulin
+        run: cargo install cargo-tarpaulin || true
+      - name: Run tarpaulin and generate Cobertura XML
+        # Generate coverage report in Cobertura-compatible XML
+        run: |
+          cargo tarpaulin --out Xml || true
+          # tarpaulin may output multiple xml filenames; normalize to cobertura.xml
+          if [ -f tarpaulin-report.xml ]; then mv tarpaulin-report.xml cobertura.xml; fi
+          if [ -f coverage.xml ] && [ ! -f cobertura.xml ]; then mv coverage.xml cobertura.xml; fi
+          ls -la || true
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: cobertura.xml
+          flags: tarpaulin
+          slug: sctg-development/microtex_rs
+          token: ${{ secrets.CODECOV_TOKEN }}
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

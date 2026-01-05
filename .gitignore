@@ -1,0 +1,27 @@
+# Fichiers binaires compilés
+target/
+
+# Fichiers de dépendances
+
+#Cargo.lock
+
+# Fichiers générés par rustfmt ou autres outils
+**/*.rs.bk
+
+# Fichiers temporaires
+*.log
+*.tmp
+
+# Fichiers spécifiques à l'IDE
+.idea/
+.vscode/
+
+# Fichiers de build pour tests
+**/*.profraw
+tmp/
+
+build/
+c++/build/
+
+.DS_Store
+.clang*

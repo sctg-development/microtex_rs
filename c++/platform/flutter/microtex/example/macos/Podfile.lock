@@ -1,0 +1,22 @@
+PODS:
+  - FlutterMacOS (1.0.0)
+  - microtex (0.0.1):
+    - FlutterMacOS
+
+DEPENDENCIES:
+  - FlutterMacOS (from `Flutter/ephemeral`)
+  - microtex (from `Flutter/ephemeral/.symlinks/plugins/microtex/macos`)
+
+EXTERNAL SOURCES:
+  FlutterMacOS:
+    :path: Flutter/ephemeral
+  microtex:
+    :path: Flutter/ephemeral/.symlinks/plugins/microtex/macos
+
+SPEC CHECKSUMS:
+  FlutterMacOS: 85f90bfb3f1703249cf1539e4dfbff31e8584698
+  microtex: fe88118fe327021b1612cb282d3b51d0f98432fb
+
+PODFILE CHECKSUM: a884f6dd3f7494f3892ee6c81feea3a3abbf9153
+
+COCOAPODS: 1.10.2

@@ -1,0 +1,43 @@
+[package]
+name = "microtex_rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["Ronan Le Meillat - SCTG Development"]
+description = "Rust bindings and CLI for MicroTeX (headless LaTeX -> SVG)"
+license = "MIT OR Apache-2.0"
+repository = "https:/github.com/sctg-development/microtex_rs"
+
+[lib]
+name = "microtex_rs"
+crate-type = ["rlib"]
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+thiserror = "2.0.17"
+byteorder = "1"
+log = "0.4"
+env_logger = "0.11"
+
+[build-dependencies]
+cmake = "0.1"
+bindgen = "0.72.1"
+sha2 = "0.10"
+
+[features]
+# Build and statically link a vendored Cairo (and minimal deps) when enabled.
+# Use environment variable `MICROTEX_USE_SYSTEM_CAIRO=1` to prefer system libraries.
+vendored-cairo = []
+vendored-pango = []
+
+[dev-dependencies]
+pretty_assertions = "1"
+env_logger = "0.11"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+[package.metadata.cargo-coverage]
+# hint for coverage tools; tests try to reach 90%+ for the Rust-only code
+coverage = 90

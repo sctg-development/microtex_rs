@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  microtex-test:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ubuntu-lts
+    image: microtex-rs:ubuntu-24.04
+    container_name: microtex-rs-test
+    environment:
+      RUST_LOG: info
+    volumes:
+      # Mount current directory to see outputs
+      - ./output:/workspace/output
+    stdin_open: true
+    tty: true
+    # Override entrypoint for testing
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        echo "=== MicroTeX Rust Docker Container ==="
+        echo "Tests: cargo test --all-features"
+        echo "Render: ./target/debug/microtex '<formula>'"
+        echo ""
+        cargo test --all-features 2>&1 | tail -30
+
+  # Variant for interactive testing
+  microtex-shell:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ubuntu-lts
+    image: microtex-rs:ubuntu-24.04
+    container_name: microtex-rs-shell
+    volumes:
+      - ./output:/workspace/output
+      - .:/workspace
+    stdin_open: true
+    tty: true
+    entrypoint: /bin/bash
+    working_dir: /workspace

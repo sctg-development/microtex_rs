@@ -1,0 +1,104 @@
+FROM alpine:3.23
+
+LABEL maintainer="MicroTeX Rust Project"
+LABEL description="Build and test MicroTeX Rust bindings on Alpine 3.23 with musl libc"
+
+# Alpine uses apk instead of apt-get
+RUN apk update && apk add --no-cache \
+    # Build essentials
+    gcc \
+    g++ \
+    musl-dev \
+    make \
+    git \
+    curl \
+    tar \
+    xz \
+    \
+    # CMake
+    cmake \
+    \
+    # Clang and development tools
+    clang \
+    clang-dev \
+    llvm-dev \
+    \
+    # Graphics library headers
+    cairo-dev \
+    pango-dev \
+    fontconfig-dev \
+    freetype-dev \
+    harfbuzz-dev \
+    glib-dev \
+    pixman-dev \
+    libpng-dev \
+    zlib-dev \
+    bzip2-dev \
+    \
+    # X11 (minimal for Cairo)
+    libx11-dev \
+    libxrender-dev \
+    xcb-util-dev \
+    \
+    # pkg-config
+    pkgconfig \
+    \
+    # Python for build scripts
+    python3 \
+    py3-pip \
+    \
+    # Utilities
+    ca-certificates \
+    linux-headers
+
+# Install Rust using rustup
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+    export PATH="$HOME/.cargo/bin:$PATH" && \
+    rustc --version && \
+    cargo --version
+
+# Set PATH environment variable for subsequent RUN commands
+ENV PATH="/root/.cargo/bin:$PATH"
+
+# Install meson and ninja via pip
+RUN pip3 install --break-system-packages meson ninja
+
+# Create working directory
+WORKDIR /workspace
+
+# Copy the entire project
+COPY . .
+
+# Display environment information
+RUN echo "=== Alpine System Information ===" && \
+    uname -a && \
+    echo "\n=== Compiler Information ===" && \
+    rustc --version && \
+    cargo --version && \
+    cmake --version && \
+    echo "\n=== Libc Type ===" && \
+    ldd /bin/sh | grep -E "musl|libc" && \
+    echo "\n=== Library Dependencies ===" && \
+    pkg-config --list-all 2>/dev/null | grep -E "(cairo|pango|fontconfig|freetype|harfbuzz)" || echo "Libraries will be vendored"
+
+# Build the project with all features
+RUN echo "=== Building with --all-features ===" && \
+    cargo build --all-features --verbose
+
+# Run tests with all features
+RUN echo "=== Running tests with --all-features ===" && \
+    cargo test --all-features --verbose
+
+# Build release version
+RUN echo "=== Build Release ===" && \
+    cargo build --all-features --release --verbose
+
+# Display final status
+RUN echo "=== Build Complete ===" && \
+    ls -lh target/debug/microtex target/release/microtex 2>/dev/null || echo "Binaries location may vary" && \
+    echo "\n=== Checking runtime dependencies ===" && \
+    ldd target/debug/microtex 2>/dev/null || echo "Binary is static or uses musl"
+
+# Set entrypoint to the CLI
+ENTRYPOINT ["./target/debug/microtex"]
+CMD ["--help"]

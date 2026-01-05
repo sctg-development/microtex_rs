@@ -1,0 +1,37 @@
+name: microtex
+description: A micro, fast, cross-platform, and embeddable LaTeX rendering library.
+version: 0.0.1
+homepage:
+
+environment:
+  sdk: ">=2.16.2 <3.0.0"
+  flutter: ">=2.5.0"
+
+dependencies:
+  ffi: ^1.1.2
+  flutter:
+    sdk: flutter
+
+dependency_overrides:
+  sky_engine:
+    path: /home/nano/Dev/engine/src/out/host_debug_unopt/gen/dart-pkg/sky_engine
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.1
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: io.nano.microtex.microtex
+        pluginClass: MicrotexPlugin
+      ios:
+        pluginClass: MicrotexPlugin
+      linux:
+        pluginClass: MicrotexPlugin
+      macos:
+        pluginClass: MicrotexPlugin
+      windows:
+        pluginClass: MicrotexPlugin
