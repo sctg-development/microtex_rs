@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Install dependencies
-        run: brew install cairo pango fontconfig pkg-config
+        run: brew install cairo pango fontconfig pkg-config lzo
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
@@ -52,7 +52,7 @@ jobs:
         run: |
           python3 -m pip install --break-system-packages meson ninja
       - name: Install dependencies
-        run: brew install cairo pango fontconfig pkg-config
+        run: brew install cairo pango fontconfig pkg-config lzo
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
