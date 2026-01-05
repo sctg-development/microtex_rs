@@ -17,8 +17,8 @@ jobs:
       TARGET: x86_64-apple-darwin
     steps:
       - uses: actions/checkout@v6
-      - name: Install dependencies
-        run: brew install cairo pango fontconfig pkg-config lzo pipx
+      - name: Install dependencies for pkg-config
+        run: brew install pkg-config pipx
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:

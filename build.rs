@@ -122,10 +122,27 @@ fn meson_build_and_install(src_dir: &Path, install_dir: &Path, meson_args: &[&st
     // Add macOS deployment target for consistency via environment variables
     let target = env::var("TARGET").unwrap_or_default();
     if target.contains("apple") {
+        // Set deployment target for all compilation
         cmd.env("CFLAGS", "-mmacosx-version-min=11.0");
         cmd.env("CXXFLAGS", "-mmacosx-version-min=11.0");
         cmd.env("OBJCFLAGS", "-mmacosx-version-min=11.0");
         cmd.env("LDFLAGS", "-mmacosx-version-min=11.0");
+        
+        // If cross-compiling on macOS (e.g., arm64 runner to x86_64 target),
+        // specify the architecture explicitly
+        if target.contains("x86_64") {
+            cmd.env("CFLAGS", "-mmacosx-version-min=11.0 -arch x86_64");
+            cmd.env("CXXFLAGS", "-mmacosx-version-min=11.0 -arch x86_64");
+            cmd.env("OBJCFLAGS", "-mmacosx-version-min=11.0 -arch x86_64");
+            cmd.env("LDFLAGS", "-mmacosx-version-min=11.0 -arch x86_64");
+            eprintln!("Cross-compiling for x86_64-apple-darwin; added -arch x86_64 flags");
+        } else if target.contains("aarch64") {
+            cmd.env("CFLAGS", "-mmacosx-version-min=11.0 -arch arm64");
+            cmd.env("CXXFLAGS", "-mmacosx-version-min=11.0 -arch arm64");
+            cmd.env("OBJCFLAGS", "-mmacosx-version-min=11.0 -arch arm64");
+            cmd.env("LDFLAGS", "-mmacosx-version-min=11.0 -arch arm64");
+            eprintln!("Compiling for aarch64-apple-darwin; added -arch arm64 flags");
+        }
     } else if target.contains("musl") {
         // musl compilation: ensure compatibility
         cmd.env("CFLAGS", "-fPIC");
@@ -939,6 +956,16 @@ fn main() {
     if target.contains("apple") {
         // Use a reasonable macOS minimum deployment target (11.0 for M1+ support)
         cmake_config.define("CMAKE_OSX_DEPLOYMENT_TARGET", "11.0");
+        
+        // If cross-compiling on macOS (e.g., arm64 runner to x86_64 target),
+        // specify the architecture explicitly
+        if target.contains("x86_64") {
+            cmake_config.define("CMAKE_OSX_ARCHITECTURES", "x86_64");
+            eprintln!("Cross-compiling for x86_64-apple-darwin; set CMAKE_OSX_ARCHITECTURES");
+        } else if target.contains("aarch64") {
+            cmake_config.define("CMAKE_OSX_ARCHITECTURES", "arm64");
+            eprintln!("Compiling for aarch64-apple-darwin; set CMAKE_OSX_ARCHITECTURES");
+        }
     }
 
     let dst = cmake_config.build();
