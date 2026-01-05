@@ -129,47 +129,49 @@ fn meson_build_and_install(src_dir: &Path, install_dir: &Path, meson_args: &[&st
         Err(e) => panic!("Tool bootstrap failed: {}", e),
     }
 
-    let mut cmd = std::process::Command::new("meson");
-    cmd.arg("setup")
-        .arg(&build_dir)
-        .arg(src_dir)
-        .arg(format!("--prefix={}", install_dir.display()));
-
-    // Add macOS deployment target for consistency via environment variables
+    // Detect target and prepare architecture-specific flags
     let target = env::var("TARGET").unwrap_or_default();
+    let mut c_args = String::from("-mmacosx-version-min=11.0");
+    let mut cpp_args = String::from("-mmacosx-version-min=11.0");
+    let mut ld_args = String::from("-mmacosx-version-min=11.0");
+    
     if target.contains("apple") {
-        // Set deployment target for all compilation
-        cmd.env("CFLAGS", "-mmacosx-version-min=11.0");
-        cmd.env("CXXFLAGS", "-mmacosx-version-min=11.0");
-        cmd.env("OBJCFLAGS", "-mmacosx-version-min=11.0");
-        cmd.env("LDFLAGS", "-mmacosx-version-min=11.0");
-        
         // If cross-compiling on macOS (e.g., arm64 runner to x86_64 target),
         // specify the architecture explicitly
         if target.contains("x86_64") {
-            cmd.env("CFLAGS", "-mmacosx-version-min=11.0 -arch x86_64");
-            cmd.env("CXXFLAGS", "-mmacosx-version-min=11.0 -arch x86_64");
-            cmd.env("OBJCFLAGS", "-mmacosx-version-min=11.0 -arch x86_64");
-            cmd.env("LDFLAGS", "-mmacosx-version-min=11.0 -arch x86_64");
+            c_args.push_str(" -arch x86_64");
+            cpp_args.push_str(" -arch x86_64");
+            ld_args.push_str(" -arch x86_64");
             eprintln!("Cross-compiling for x86_64-apple-darwin; added -arch x86_64 flags");
         } else if target.contains("aarch64") {
-            cmd.env("CFLAGS", "-mmacosx-version-min=11.0 -arch arm64");
-            cmd.env("CXXFLAGS", "-mmacosx-version-min=11.0 -arch arm64");
-            cmd.env("OBJCFLAGS", "-mmacosx-version-min=11.0 -arch arm64");
-            cmd.env("LDFLAGS", "-mmacosx-version-min=11.0 -arch arm64");
+            c_args.push_str(" -arch arm64");
+            cpp_args.push_str(" -arch arm64");
+            ld_args.push_str(" -arch arm64");
             eprintln!("Compiling for aarch64-apple-darwin; added -arch arm64 flags");
         }
     } else if target.contains("musl") {
         // musl compilation: ensure compatibility
-        cmd.env("CFLAGS", "-fPIC");
-        cmd.env("CXXFLAGS", "-fPIC");
-        cmd.env("LDFLAGS", "-static-libgcc");
+        c_args = String::from("-fPIC");
+        cpp_args = String::from("-fPIC");
+        ld_args = String::from("-static-libgcc");
     }
 
     // Try running meson setup, but be resilient to unknown -D options
     // Some Cairo releases expose different meson options; if meson reports
     // "Unknown option: \"foo\"" we remove the offending -Dfoo option and retry.
     let mut args: Vec<String> = meson_args.iter().map(|s| s.to_string()).collect();
+    
+    // Add architecture/platform flags as Meson options
+    if !c_args.is_empty() {
+        args.push(format!("-Dc_args={}", c_args));
+    }
+    if !cpp_args.is_empty() {
+        args.push(format!("-Dcpp_args={}", cpp_args));
+    }
+    if !ld_args.is_empty() {
+        args.push(format!("-Dcpp_link_args={}", ld_args));
+        args.push(format!("-Dc_link_args={}", ld_args));
+    }
 
     for attempt in 0..4 {
         let mut cmd_try = std::process::Command::new("meson");
