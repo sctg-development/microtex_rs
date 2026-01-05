@@ -175,8 +175,52 @@ fn meson_build_and_install(src_dir: &Path, install_dir: &Path, meson_args: &[&st
             }
         }
         if !removed_any {
-            // No unknown option detected, abort with captured stderr
-            panic!("Meson setup failed and no unknown options were found:\n{}", stderr);
+            // No unknown option detected, collect extra debug info and abort
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            eprintln!("Meson stdout:\n{}", stdout);
+            eprintln!("Meson stderr:\n{}", stderr);
+
+            // Print environment and tool versions that can affect Meson
+            if let Ok(path) = env::var("PATH") {
+                eprintln!("PATH={}", path);
+            }
+            if let Ok(pkg) = env::var("PKG_CONFIG_PATH") {
+                eprintln!("PKG_CONFIG_PATH={}", pkg);
+            }
+            let _ = std::process::Command::new("which")
+                .arg("meson")
+                .status()
+                .map(|s| eprintln!("which meson exit: {:?}", s));
+            let _ = std::process::Command::new("meson")
+                .arg("--version")
+                .status()
+                .map(|s| eprintln!("meson --version exit: {:?}", s));
+            let _ = std::process::Command::new("ninja")
+                .arg("--version")
+                .status()
+                .map(|s| eprintln!("ninja --version exit: {:?}", s));
+            let _ = std::process::Command::new("python3")
+                .arg("--version")
+                .status()
+                .map(|s| eprintln!("python3 --version exit: {:?}", s));
+            let _ = std::process::Command::new("pipx")
+                .arg("--version")
+                .status()
+                .map(|s| eprintln!("pipx --version exit: {:?}", s));
+
+            // If Meson created a meson-log, print it for more detail
+            let meson_log = build_dir.join("meson-logs").join("meson-log.txt");
+            if meson_log.exists() {
+                if let Ok(contents) = std::fs::read_to_string(&meson_log) {
+                    eprintln!("meson log ({}):\n{}", meson_log.display(), contents);
+                } else {
+                    eprintln!("meson log exists but could not be read: {}", meson_log.display());
+                }
+            } else {
+                eprintln!("meson log not found at expected path: {}", meson_log.display());
+            }
+
+            panic!("Meson setup failed and no unknown options were found. See CI log for meson stdout/stderr and meson log file.");
         }
         // otherwise retry with pruned args
     }
