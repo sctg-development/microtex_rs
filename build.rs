@@ -122,6 +122,11 @@ fn meson_build_and_install(src_dir: &Path, install_dir: &Path, meson_args: &[&st
         cmd.env("CXXFLAGS", "-mmacosx-version-min=11.0");
         cmd.env("OBJCFLAGS", "-mmacosx-version-min=11.0");
         cmd.env("LDFLAGS", "-mmacosx-version-min=11.0");
+    } else if target.contains("musl") {
+        // musl compilation: ensure compatibility
+        cmd.env("CFLAGS", "-fPIC");
+        cmd.env("CXXFLAGS", "-fPIC");
+        cmd.env("LDFLAGS", "-static-libgcc");
     }
 
     // Try running meson setup, but be resilient to unknown -D options
@@ -649,70 +654,43 @@ fn main() {
                 "Configuring Cairo with meson (prefix={})",
                 install_dir.display()
             );
-            let mut cairo_cmd = std::process::Command::new("meson");
-            cairo_cmd
-                .arg("setup")
-                .arg(&build_dir)
-                .arg(&src_dir)
-                .arg(format!("--prefix={}", install_dir.display()))
-                .arg("-Ddefault_library=static")
-                .arg("-Dtests=disabled")
-                .arg("-Dfontconfig=enabled")
-                .arg("-Dpng=enabled")
-                .arg("-Dfreetype=enabled")
-                // Disable the Cairo script interpreter to avoid optional lzo dependency
-                // which is not required for MicroTeX rendering and can cause CI failures
-                .arg("-Dscript=false")
-                .arg("-Dscript-interpreter=false");
 
-            // Platform-specific Cairo options
+            // Build meson args list and delegate to meson_build_and_install which is
+            // resilient to unsupported -D options.
             let target = env::var("TARGET").unwrap_or_default();
             let is_musl = target.contains("musl");
-            
+
+            let mut cairo_args: Vec<&str> = vec![
+                "-Ddefault_library=static",
+                "-Dtests=disabled",
+                "-Dfontconfig=enabled",
+                "-Dpng=enabled",
+                "-Dfreetype=enabled",
+                // try to disable the script interpreter if supported by this Cairo release
+                "-Dscript-interpreter=false",
+            ];
+
             if target.contains("apple") {
                 // macOS: use Quartz backend, disable X11
-                cairo_cmd.arg("-Dquartz=enabled");
-                cairo_cmd.arg("-Dxlib=disabled");
-                cairo_cmd.arg("-Dxcb=disabled");
+                cairo_args.push("-Dquartz=enabled");
+                cairo_args.push("-Dxlib=disabled");
+                cairo_args.push("-Dxcb=disabled");
             } else {
                 // Linux/other: disable Quartz (doesn't exist), disable X11/XCB for minimal static build
-                cairo_cmd.arg("-Dquartz=disabled");
-                cairo_cmd.arg("-Dxlib=disabled");
-                cairo_cmd.arg("-Dxcb=disabled");
-                
+                cairo_args.push("-Dquartz=disabled");
+                cairo_args.push("-Dxlib=disabled");
+                cairo_args.push("-Dxcb=disabled");
+
                 // musl-specific: disable features that might not work well
                 if is_musl {
                     eprintln!("Configuring Cairo for musl libc (Alpine Linux)");
-                    cairo_cmd.arg("-Dspectre=disabled");
+                    cairo_args.push("-Dspectre=disabled");
                 }
             }
 
-            // Add platform-specific compilation flags
-            if target.contains("apple") {
-                cairo_cmd.env("CFLAGS", "-mmacosx-version-min=11.0");
-                cairo_cmd.env("CXXFLAGS", "-mmacosx-version-min=11.0");
-                cairo_cmd.env("OBJCFLAGS", "-mmacosx-version-min=11.0");
-                cairo_cmd.env("LDFLAGS", "-mmacosx-version-min=11.0");
-            } else if is_musl {
-                // musl compilation: ensure compatibility
-                cairo_cmd.env("CFLAGS", "-fPIC");
-                cairo_cmd.env("CXXFLAGS", "-fPIC");
-                cairo_cmd.env("LDFLAGS", "-static-libgcc");
-            }
+            // Delegate to the robust meson builder which will prune unknown options
+            meson_build_and_install(&src_dir, &install_dir, &cairo_args);
 
-            run_cmd(&mut cairo_cmd);
-            eprintln!("Running ninja");
-            run_cmd(
-                std::process::Command::new("ninja")
-                    .arg("-C")
-                    .arg(&build_dir),
-            );
-            run_cmd(
-                std::process::Command::new("ninja")
-                    .arg("-C")
-                    .arg(&build_dir)
-                    .arg("install"),
-            );
         }
 
         // If installed, add its pkgconfig path to PKG_CONFIG_PATH so CMake finds it
