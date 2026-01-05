@@ -920,6 +920,13 @@ fn main() {
 
     // Build MicroTeX C++ library using cmake with HAVE_CWRAPPER enabled
     let mut cmake_config = cmake::Config::new("./c++");
+    
+    // Ensure CMake inherits PKG_CONFIG_PATH for vendored Cairo/Pango discovery
+    if let Ok(pkg_config_path) = env::var("PKG_CONFIG_PATH") {
+        eprintln!("Passing PKG_CONFIG_PATH to CMake: {}", pkg_config_path);
+        cmake_config.env("PKG_CONFIG_PATH", &pkg_config_path);
+    }
+    
     cmake_config
         .define("HAVE_CWRAPPER", "ON")
         .define("BUILD_STATIC", "ON")
