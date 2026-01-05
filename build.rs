@@ -124,10 +124,58 @@ fn meson_build_and_install(src_dir: &Path, install_dir: &Path, meson_args: &[&st
         cmd.env("LDFLAGS", "-mmacosx-version-min=11.0");
     }
 
-    for a in meson_args.iter() {
-        cmd.arg(a);
+    // Try running meson setup, but be resilient to unknown -D options
+    // Some Cairo releases expose different meson options; if meson reports
+    // "Unknown option: \"foo\"" we remove the offending -Dfoo option and retry.
+    let mut args: Vec<String> = meson_args.iter().map(|s| s.to_string()).collect();
+
+    for attempt in 0..4 {
+        let mut cmd_try = std::process::Command::new("meson");
+        cmd_try.arg("setup").arg(&build_dir).arg(src_dir).arg(format!("--prefix={}", install_dir.display()));
+        for a in args.iter() {
+            cmd_try.arg(a);
+        }
+
+        eprintln!("Attempt {}: running meson with args: {:?}", attempt + 1, &args);
+        let output = cmd_try.output().expect("failed to spawn meson");
+        if output.status.success() {
+            break;
+        }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        eprintln!("meson failed: {}", stderr);
+        // Look for Unknown option messages and remove offending -D flags
+        let mut removed_any = false;
+        for line in stderr.lines() {
+            if line.contains("ERROR: Unknown option:") {
+                if let Some(start) = line.find('"') {
+                    if let Some(end) = line[start + 1..].find('"') {
+                        let opt = &line[start + 1..start + 1 + end];
+                        // Remove any -D<opt> or -D<opt>=... entries from args
+                        let before = args.len();
+                        args.retain(|a| {
+                            if a == &format!("-D{}", opt) {
+                                false
+                            } else if a.starts_with(&format!("-D{}=", opt)) {
+                                false
+                            } else {
+                                true
+                            }
+                        });
+                        if args.len() < before {
+                            eprintln!("Removed unsupported meson option: {}", opt);
+                            removed_any = true;
+                        }
+                    }
+                }
+            }
+        }
+        if !removed_any {
+            // No unknown option detected, abort with captured stderr
+            panic!("Meson setup failed and no unknown options were found:\n{}", stderr);
+        }
+        // otherwise retry with pruned args
     }
-    run_cmd(&mut cmd);
+
     run_cmd(
         std::process::Command::new("ninja")
             .arg("-C")
