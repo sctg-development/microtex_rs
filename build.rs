@@ -174,6 +174,39 @@ fn meson_build_and_install(src_dir: &Path, install_dir: &Path, meson_args: &[&st
                 }
             }
         }
+
+        // If Meson didn't emit the unknown-option error on stderr, check meson-log.txt
+        if !removed_any {
+            let meson_log = build_dir.join("meson-logs").join("meson-log.txt");
+            if meson_log.exists() {
+                if let Ok(contents) = std::fs::read_to_string(&meson_log) {
+                    for line in contents.lines() {
+                        if line.contains("ERROR: Unknown option:") {
+                            if let Some(start) = line.find('"') {
+                                if let Some(end) = line[start + 1..].find('"') {
+                                    let opt = &line[start + 1..start + 1 + end];
+                                    let before = args.len();
+                                    args.retain(|a| {
+                                        if a == &format!("-D{}", opt) {
+                                            false
+                                        } else if a.starts_with(&format!("-D{}=", opt)) {
+                                            false
+                                        } else {
+                                            true
+                                        }
+                                    });
+                                    if args.len() < before {
+                                        eprintln!("Removed unsupported meson option from meson-log: {}", opt);
+                                        removed_any = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if !removed_any {
             // No unknown option detected, collect extra debug info and abort
             let stdout = String::from_utf8_lossy(&output.stdout);
