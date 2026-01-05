@@ -857,6 +857,17 @@ fn main() {
         } else {
             println!("cargo:warning=vendored cairo install directory missing pkgconfig at {}, continuing and hoping system pkg-config will locate libraries", install_dir.join("lib").display());
         }
+        
+        // Also add the deps-install lib directory (for pixman, freetype, harfbuzz, fontconfig)
+        // These are built alongside cairo in vendor_core_deps()
+        let deps_install = out_dir.join("vendored").join("deps-install").join("lib");
+        if deps_install.exists() {
+            println!(
+                "cargo:rustc-link-search=native={}",
+                deps_install.display()
+            );
+            println!("cargo:warning=Added vendored deps lib search path: {}", deps_install.display());
+        }
     }
 
     // Ensure pkg-config is present (CMake uses it to find system libraries)
@@ -1040,14 +1051,20 @@ fn main() {
     // Link system graphics libraries required when CAIRO is enabled.
     // If we built vendored static cairo above (including auto-built), prefer to link the static copy.
     if using_vendored {
-        // prefer static cairo provided by vendored build
+        // When using vendored Cairo, link in dependency order (reverse topological):
+        // cairo -> freetype, pixman, fontconfig -> harfbuzz, png, z, etc.
         println!("cargo:rustc-link-lib=static=cairo");
+        println!("cargo:rustc-link-lib=static=pixman-1");
+        println!("cargo:rustc-link-lib=static=freetype");
+        println!("cargo:rustc-link-lib=static=harfbuzz");
+        println!("cargo:rustc-link-lib=static=fontconfig");
+        println!("cargo:rustc-link-lib=static=png");
     } else {
         println!("cargo:rustc-link-lib=cairo");
+        println!("cargo:rustc-link-lib=pango-1.0");
+        println!("cargo:rustc-link-lib=pangocairo-1.0");
+        println!("cargo:rustc-link-lib=fontconfig");
     }
-    println!("cargo:rustc-link-lib=pango-1.0");
-    println!("cargo:rustc-link-lib=pangocairo-1.0");
-    println!("cargo:rustc-link-lib=fontconfig");
 
     // Also query pkg-config for any additional link flags required by our graphics
     // toolchain packages (static case) and emit appropriate cargo:rustc-link-lib directives.
