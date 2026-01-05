@@ -747,6 +747,8 @@ fn main() {
                 "-Dfontconfig=enabled",
                 "-Dpng=enabled",
                 "-Dfreetype=enabled",
+                // disable lzo to avoid header not found issues on some systems
+                "-Dlzo=disabled",
                 // try to disable the script interpreter if supported by this Cairo release
                 "-Dscript-interpreter=false",
             ];
