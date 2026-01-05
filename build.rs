@@ -342,7 +342,7 @@ fn vendor_core_deps(out_dir: &Path) -> bool {
             "harfbuzz",
             "harfbuzz-2.9.1.tar.xz",
             "https://github.com/harfbuzz/harfbuzz/releases/download/2.9.1/harfbuzz-2.9.1.tar.xz",
-            &["-Ddefault_library=static", "-Ddocs=false"],
+            &["-Ddefault_library=static", "-Ddocs=disabled"],
         ),
         (
             "fontconfig",
