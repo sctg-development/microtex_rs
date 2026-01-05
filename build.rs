@@ -19,9 +19,13 @@ fn collect_clm_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 fn run_cmd(cmd: &mut std::process::Command) {
     eprintln!("running: {:?}", cmd);
-    let status = cmd.status().expect("failed to spawn command");
-    if !status.success() {
-        panic!("command failed: {:?}", status);
+    let output = cmd.output().expect("failed to spawn command");
+    if !output.status.success() {
+        eprintln!("=== COMMAND STDOUT ===");
+        eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+        eprintln!("=== COMMAND STDERR ===");
+        eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+        panic!("command failed: {:?}", output.status);
     }
 }
 
