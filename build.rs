@@ -611,7 +611,11 @@ fn main() {
                 .arg("-Dtests=disabled")
                 .arg("-Dfontconfig=enabled")
                 .arg("-Dpng=enabled")
-                .arg("-Dfreetype=enabled");
+                .arg("-Dfreetype=enabled")
+                // Disable the Cairo script interpreter to avoid optional lzo dependency
+                // which is not required for MicroTeX rendering and can cause CI failures
+                .arg("-Dscript=false")
+                .arg("-Dscript-interpreter=false");
 
             // Platform-specific Cairo options
             let target = env::var("TARGET").unwrap_or_default();
