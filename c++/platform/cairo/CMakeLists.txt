@@ -3,8 +3,8 @@ message(STATUS "Cross-building using GTK")
 find_package(Fontconfig REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(Cairo REQUIRED IMPORTED_TARGET cairo)
-pkg_check_modules(Pango REQUIRED IMPORTED_TARGET pango)
-pkg_check_modules(Pangocairo REQUIRED IMPORTED_TARGET pangocairo)
+pkg_check_modules(Pango IMPORTED_TARGET pango)
+pkg_check_modules(Pangocairo IMPORTED_TARGET pangocairo)
 
 if (DEFINED _BUILD_STATIC AND _BUILD_STATIC)
   # When building a static microtex library we integrate the Cairo backend
@@ -13,10 +13,15 @@ if (DEFINED _BUILD_STATIC AND _BUILD_STATIC)
   target_sources(microtex PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/graphic_cairo.cpp)
   target_include_directories(microtex PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
                                               ${Cairo_INCLUDE_DIRS}
-                                              ${Fontconfig_INCLUDE_DIRS}
-                                              ${Pango_INCLUDE_DIRS}
-                                              ${Pangocairo_INCLUDE_DIRS})
-  target_link_libraries(microtex PRIVATE ${Cairo_LIBRARIES} ${Pango_LIBRARIES} ${Pangocairo_LIBRARIES} ${Fontconfig_LIBRARIES})
+                                              ${Fontconfig_INCLUDE_DIRS})
+  if (Pango_FOUND)
+    target_include_directories(microtex PRIVATE ${Pango_INCLUDE_DIRS}
+                                                ${Pangocairo_INCLUDE_DIRS})
+  endif()
+  target_link_libraries(microtex PRIVATE ${Cairo_LIBRARIES} ${Fontconfig_LIBRARIES})
+  if (Pango_FOUND)
+    target_link_libraries(microtex PRIVATE ${Pango_LIBRARIES} ${Pangocairo_LIBRARIES})
+  endif()
   target_compile_definitions(microtex PRIVATE -DHAVE_CAIRO)
 else ()
   if (DEFINED _BUILD_STATIC AND _BUILD_STATIC)
@@ -39,19 +44,24 @@ else ()
       microtex
       ${Fontconfig_LIBRARIES}
       ${Cairo_LIBRARIES}
-      ${Pango_LIBRARIES}
-      ${Pangocairo_LIBRARIES}
-      #Fontconfig::Fontconfig
-      #PkgConfig::Cairo
-      #PkgConfig::Pango
-      #PkgConfig::Pangocairo
   )
+  if (Pango_FOUND)
+    target_link_libraries(
+        microtex-cairo PRIVATE
+        ${Pango_LIBRARIES}
+        ${Pangocairo_LIBRARIES}
+    )
+  endif()
   include_directories(
     ${Cairo_INCLUDE_DIRS}
     ${Fontconfig_INCLUDE_DIRS}
-    ${Pango_INCLUDE_DIRS}
-    ${Pangocairo_INCLUDE_DIRS}
   )
+  if (Pango_FOUND)
+    include_directories(
+      ${Pango_INCLUDE_DIRS}
+      ${Pangocairo_INCLUDE_DIRS}
+    )
+  endif()
 endif ()
 
 #microtex_install_target(microtex-cairo)

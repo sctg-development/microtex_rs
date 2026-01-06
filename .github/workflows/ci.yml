@@ -17,8 +17,8 @@ jobs:
       TARGET: x86_64-apple-darwin
     steps:
       - uses: actions/checkout@v6
-      - name: Install dependencies for pkg-config
-        run: brew install pkg-config pipx
+      - name: Install dependencies for vendored build (x86_64 cross-compile)
+        run: brew install pkg-config cmake meson ninja pipx
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:

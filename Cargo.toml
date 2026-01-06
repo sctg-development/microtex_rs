@@ -28,6 +28,9 @@ sha2 = "0.10"
 # Use environment variable `MICROTEX_USE_SYSTEM_CAIRO=1` to prefer system libraries.
 vendored-cairo = []
 vendored-pango = []
+# Force fully vendored build of all dependencies (pixman, libpng, freetype, harfbuzz, fontconfig, cairo)
+# This is useful for cross-compilation and hermetic builds
+vendored-all = ["vendored-cairo", "vendored-pango"]
 
 [dev-dependencies]
 pretty_assertions = "1"

@@ -175,7 +175,11 @@ fn meson_build_and_install(src_dir: &Path, install_dir: &Path, meson_args: &[&st
 
     for attempt in 0..4 {
         let mut cmd_try = std::process::Command::new("meson");
-        cmd_try.arg("setup").arg(&build_dir).arg(src_dir).arg(format!("--prefix={}", install_dir.display()));
+        cmd_try
+            .arg("setup")
+            .arg(&build_dir)
+            .arg(src_dir)
+            .arg(format!("--prefix={}", install_dir.display()));
         for a in args.iter() {
             cmd_try.arg(a);
         }
@@ -319,6 +323,124 @@ fn meson_build_and_install(src_dir: &Path, install_dir: &Path, meson_args: &[&st
     }
 }
 
+/// Build an Autotools-based project (e.g., pcre2) located in `src_dir` and install into `install_dir`.
+fn autotools_build_and_install(src_dir: &Path, install_dir: &Path) {
+    use std::process::Command;
+    
+    let target = env::var("TARGET").unwrap_or_default();
+    let nproc = std::thread::available_parallelism()
+        .map(|n| n.get().to_string())
+        .unwrap_or_else(|_| "1".to_string());
+    
+    // Prepare configure arguments
+    let prefix_arg = format!("--prefix={}", install_dir.display());
+    let configure_args = vec![
+        "--enable-static",
+        "--disable-shared",
+        prefix_arg.as_str(),
+    ];
+    
+    // Build configure command with environment variables for cross-compilation
+    let mut configure_cmd = format!("cd '{}' && ", src_dir.display());
+    
+    if target.contains("x86_64-apple") {
+        configure_cmd.push_str("CFLAGS='-mmacosx-version-min=11.0 -arch x86_64' ");
+        configure_cmd.push_str("CXXFLAGS='-mmacosx-version-min=11.0 -arch x86_64' ");
+        configure_cmd.push_str("LDFLAGS='-mmacosx-version-min=11.0 -arch x86_64' ");
+    }
+    
+    configure_cmd.push_str("./configure ");
+    configure_cmd.push_str(&configure_args.join(" "));
+    
+    eprintln!("Running configure: {}", configure_cmd);
+    let configure_status = Command::new("sh")
+        .arg("-c")
+        .arg(&configure_cmd)
+        .status()
+        .expect("Failed to execute configure");
+    
+    if !configure_status.success() {
+        panic!("configure failed with status: {}", configure_status);
+    }
+    
+    eprintln!("Running make with {} parallel jobs", nproc);
+    let make_status = Command::new("sh")
+        .arg("-c")
+        .arg(format!("cd '{}' && make -j{}", src_dir.display(), nproc))
+        .status()
+        .expect("Failed to execute make");
+    
+    if !make_status.success() {
+        panic!("make failed with status: {}", make_status);
+    }
+    
+    eprintln!("Running make install");
+    let install_status = Command::new("sh")
+        .arg("-c")
+        .arg(format!("cd '{}' && make install", src_dir.display()))
+        .status()
+        .expect("Failed to execute make install");
+    
+    if !install_status.success() {
+        panic!("make install failed with status: {}", install_status);
+    }
+    
+    eprintln!("pcre2 built and installed successfully");
+    
+    // Verify installation succeeded
+    let lib_dir = install_dir.join("lib");
+    if !lib_dir.exists() {
+        panic!(
+            "Installation failed: lib directory not found at {}. Autotools did not complete successfully.",
+            lib_dir.display()
+        );
+    }
+}
+
+/// Build a CMake-based project (e.g., libpng) located in `src_dir` and install into `install_dir`.
+fn cmake_build_and_install(src_dir: &Path, install_dir: &Path) {
+    let build_dir = src_dir.join("build");
+    let _ = std::fs::create_dir_all(&build_dir);
+
+    // Detect target and prepare architecture-specific flags
+    let target = env::var("TARGET").unwrap_or_default();
+    let mut cmake_config = cmake::Config::new(src_dir);
+    
+    cmake_config
+        .out_dir(&build_dir)
+        .define("CMAKE_INSTALL_PREFIX", install_dir)
+        .define("CMAKE_POLICY_VERSION_MINIMUM", "3.5")
+        .define("BUILD_SHARED_LIBS", "OFF")
+        .define("PNG_SHARED", "OFF")
+        .define("PNG_TESTS", "OFF")
+        .define("PNG_STATIC", "ON");
+
+    // Add macOS-specific configuration
+    if target.contains("apple") {
+        cmake_config.define("CMAKE_OSX_DEPLOYMENT_TARGET", "11.0");
+        
+        if target.contains("x86_64") {
+            cmake_config.define("CMAKE_OSX_ARCHITECTURES", "x86_64");
+            eprintln!("Cross-compiling libpng for x86_64-apple-darwin");
+        } else if target.contains("aarch64") {
+            cmake_config.define("CMAKE_OSX_ARCHITECTURES", "arm64");
+            eprintln!("Compiling libpng for aarch64-apple-darwin");
+        }
+    }
+
+    let _dst = cmake_config.build();
+    eprintln!("libpng built and installed successfully");
+
+    // Verify installation succeeded by checking for library files
+    let lib_dir = install_dir.join("lib");
+    if !lib_dir.exists() {
+        panic!(
+            "Installation failed: lib directory not found at {}. CMake did not complete successfully.",
+            lib_dir.display()
+        );
+    }
+}
+
 /// Build a sequence of core dependencies (pixman, freetype, harfbuzz, fontconfig, cairo)
 /// Returns true if we performed a successful vendored build.
 fn vendor_core_deps(out_dir: &Path) -> bool {
@@ -327,7 +449,14 @@ fn vendor_core_deps(out_dir: &Path) -> bool {
     let _ = std::fs::create_dir_all(&vendored);
 
     // Define packages (name, tar_name, url, meson args)
+    // NOTE: pcre2 must come first as it's required by glib which is pulled by cairo/pango
     let pkgs: &[(&str, &str, &str, &[&str])] = &[
+        (
+            "pcre2",
+            "pcre2-10.47.tar.gz",
+            "https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.47/pcre2-10.47.tar.gz",
+            &["-Ddefault_library=static", "-Dtests=false"],
+        ),
         (
             "pixman",
             "pixman-0.46.4.tar.xz",
@@ -335,22 +464,16 @@ fn vendor_core_deps(out_dir: &Path) -> bool {
             &["-Ddefault_library=static", "-Dtests=disabled"],
         ),
         (
-            "freetype",
-            "freetype-2.12.1.tar.gz",
-            "https://download.savannah.gnu.org/releases/freetype/freetype-2.12.1.tar.gz",
-            &["-Ddefault_library=static", "-Ddocs=false"],
-        ),
-        (
             "harfbuzz",
-            "harfbuzz-2.9.1.tar.xz",
-            "https://github.com/harfbuzz/harfbuzz/releases/download/2.9.1/harfbuzz-2.9.1.tar.xz",
+            "harfbuzz-12.3.0.tar.xz",
+            "https://github.com/harfbuzz/harfbuzz/releases/download/12.3.0/harfbuzz-12.3.0.tar.xz",
             &["-Ddefault_library=static", "-Ddocs=disabled"],
         ),
         (
-            "fontconfig",
-            "fontconfig-2.14.2.tar.gz",
-            "https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.14.2.tar.gz",
-            &["-Ddefault_library=static", "-Ddocdir=disabled"],
+            "freetype",
+            "freetype-2.14.1.tar.gz",
+            "https://download.savannah.gnu.org/releases/freetype/freetype-2.14.1.tar.gz",
+            &["-Ddefault_library=static", "-Dbrotli=disabled", "-Dharfbuzz=enabled"],
         ),
         (
             "cairo",
@@ -361,9 +484,27 @@ fn vendor_core_deps(out_dir: &Path) -> bool {
                 "-Dtests=disabled",
                 "-Dxlib=disabled",
                 "-Dquartz=enabled",
-                "-Dfontconfig=enabled",
-                "-Dpng=enabled",
-                "-Dfreetype=enabled",
+                "-Dfontconfig=disabled",  // Disable fontconfig to avoid Glib dependency chain
+                "-Dpng=enabled",         // Use system libpng (available via brew)
+                "-Dfreetype=enabled",    // Vendored freetype
+                "-Dglib=disabled",       // Disable to avoid glib-2.74.0 subproject issues; pango will handle glib integration
+            ],
+        ),
+        (
+            "glib",
+            "glib-2.87.1.tar.xz",
+            "https://download.gnome.org/sources/glib/2.87/glib-2.87.1.tar.xz",
+            &[
+                "-Ddefault_library=static",
+                "-Dios_build=false",  // Disable iOS notifications
+            ],
+        ),
+        (
+            "pango",
+            "pango-1.50.14.tar.xz",
+            "https://download.gnome.org/sources/pango/1.50/pango-1.50.14.tar.xz",
+            &[
+                "-Ddefault_library=static",
             ],
         ),
     ];
@@ -393,15 +534,19 @@ fn vendor_core_deps(out_dir: &Path) -> bool {
         }
         // extract
         extract_tarball(&tarball, &src_dir);
-        // Build with meson
-        {
+        
+        // pcre2 uses Autotools, all others use Meson
+        if name == &"pcre2" {
+            autotools_build_and_install(&src_dir, &install_dir);
+        } else {
             // try to ensure meson/ninja are available before building each core dep (in case user forced clean env)
             match ensure_meson_and_ninja() {
                 Ok(_) => {}
                 Err(e) => panic!("Tool bootstrap failed: {}", e),
             }
+            meson_build_and_install(&src_dir, &install_dir, meson_args);
         }
-        meson_build_and_install(&src_dir, &install_dir, meson_args);
+        
         // update pkg-config path for subsequent packages
         let pkgconfig_path = install_dir.join("lib").join("pkgconfig");
         if pkgconfig_path.exists() {
@@ -779,13 +924,12 @@ fn main() {
             let mut cairo_args: Vec<&str> = vec![
                 "-Ddefault_library=static",
                 "-Dtests=disabled",
-                "-Dfontconfig=enabled",
+                "-Dfontconfig=disabled",  // Disable fontconfig to avoid Glib dependency chain
+                "-Dglib=disabled",        // Disable glib to avoid subproject issues; pango will handle integration
                 "-Dpng=enabled",
                 "-Dfreetype=enabled",
                 // disable lzo to avoid header not found issues on some systems
                 "-Dlzo=disabled",
-                // try to disable the script interpreter if supported by this Cairo release
-                "-Dscript-interpreter=false",
             ];
 
             if target.contains("apple") {
@@ -870,41 +1014,62 @@ fn main() {
         }
     }
 
+    // Check if the user explicitly asked to force ALL vendored (all deps including libpng, zlib, etc)
+    let force_vendored_all = env::var("CARGO_FEATURE_VENDORED_ALL").is_ok()
+        || env::var("MICROTEX_FORCE_VENDORED").is_ok();
+
     // Ensure pkg-config is present (CMake uses it to find system libraries)
-    if std::process::Command::new("pkg-config")
+    // If forcing vendored-all, pkg-config is optional since everything is self-contained
+    let pkg_config_available = std::process::Command::new("pkg-config")
         .arg("--version")
         .status()
-        .is_err()
-    {
-        panic!("pkg-config not found on PATH. Install it (e.g. `brew install pkg-config`) or ensure it is available. If you want a fully vendored build, we can extend to build Pango / Fontconfig too — open an issue if you want that.");
+        .is_ok();
+
+    if !pkg_config_available && !force_vendored_all {
+        panic!("pkg-config not found on PATH. Install it (e.g. `brew install pkg-config`) or ensure it is available. Alternatively, use `--features vendored-all` for a fully self-contained build.");
     }
 
     // If not using vendored cairo, verify required pkg-config libraries are present.
     let mut using_vendored = env::var("CARGO_FEATURE_VENDORED_CAIRO").is_ok()
         || env::var("MICROTEX_VENDORED_CAIRO").is_ok();
-
+    
     // Check if the user explicitly asked to vendor pango/glib
     let vendored_pango_feature = env::var("CARGO_FEATURE_VENDORED_PANGO").is_ok();
     let vendored_pango_env = env::var("MICROTEX_VENDORED_PANGO").is_ok();
 
-    if !using_vendored || vendored_pango_feature || vendored_pango_env {
-        // collect missing packages
+    if force_vendored_all {
+        // Force complete vendored build regardless of system libs availability
+        println!("cargo:warning=FORCE_VENDORED mode: building all dependencies from source");
+        let auto_ok = vendor_core_deps(&out_dir);
+        if auto_ok {
+            using_vendored = true;
+        } else {
+            panic!("Forced vendored build failed. Check the build logs above for details.");
+        }
+    } else if !using_vendored || vendored_pango_feature || vendored_pango_env {
+        // collect missing packages (only if pkg-config is available)
         let required = ["cairo", "pango", "pangocairo", "fontconfig"];
         let mut missing = Vec::new();
-        for pkg in required.iter() {
-            let ok = std::process::Command::new("pkg-config")
-                .arg("--exists")
-                .arg(pkg)
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-            if !ok {
-                missing.push(*pkg);
+        
+        if pkg_config_available {
+            for pkg in required.iter() {
+                let ok = std::process::Command::new("pkg-config")
+                    .arg("--exists")
+                    .arg(pkg)
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false);
+                if !ok {
+                    missing.push(*pkg);
+                }
             }
+        } else {
+            // If pkg-config not available, assume all are missing and force vendored
+            missing = required.to_vec();
         }
 
         if !missing.is_empty() {
-            if prefer_system && !(vendored_pango_feature || vendored_pango_env) {
+            if prefer_system && !(vendored_pango_feature || vendored_pango_env) && pkg_config_available {
                 panic!("Missing system packages: {:?}. Set MICROTEX_USE_SYSTEM_CAIRO=0 or install them with Homebrew: brew install cairo pango fontconfig", missing);
             }
 
@@ -1052,12 +1217,16 @@ fn main() {
     // If we built vendored static cairo above (including auto-built), prefer to link the static copy.
     if using_vendored {
         // When using vendored Cairo, link in dependency order (reverse topological):
-        // cairo -> freetype, pixman, fontconfig -> harfbuzz, png, z, etc.
+        // cairo -> pixman, freetype, libpng, harfbuzz -> pango -> glib -> pcre2
+        println!("cargo:rustc-link-lib=static=pcre2-8");
+        println!("cargo:rustc-link-lib=static=glib-2.0");
+        println!("cargo:rustc-link-lib=static=gobject-2.0");
+        println!("cargo:rustc-link-lib=static=pango-1.0");
+        println!("cargo:rustc-link-lib=static=pangocairo-1.0");
         println!("cargo:rustc-link-lib=static=cairo");
         println!("cargo:rustc-link-lib=static=pixman-1");
         println!("cargo:rustc-link-lib=static=freetype");
         println!("cargo:rustc-link-lib=static=harfbuzz");
-        println!("cargo:rustc-link-lib=static=fontconfig");
         println!("cargo:rustc-link-lib=static=png");
     } else {
         println!("cargo:rustc-link-lib=cairo");
