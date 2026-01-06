@@ -124,6 +124,48 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-features --no-fail-fast
 
+  build-windows:
+    name: Build Windows (x86_64)
+    runs-on: windows-latest
+    env:
+      TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - name: Add target
+        run: rustup target add ${{ env.TARGET }}
+      - name: Install vcpkg
+        shell: bash
+        run: |
+          if [ ! -d "C:/vcpkg" ]; then
+            git clone https://github.com/Microsoft/vcpkg.git C:/vcpkg
+            C:/vcpkg/bootstrap-vcpkg.bat
+          fi
+      - name: Install dependencies via vcpkg
+        shell: bash
+        run: |
+          C:/vcpkg/vcpkg.exe install cairo:x64-windows pango:x64-windows fontconfig:x64-windows pkgconf:x64-windows libpng:x64-windows freetype:x64-windows harfbuzz:x64-windows pixman:x64-windows libffi:x64-windows pcre2:x64-windows zlib:x64-windows bzip2:x64-windows lzo:x64-windows
+      - name: Set VCPKG_ROOT
+        shell: bash
+        run: echo "VCPKG_ROOT=C:/vcpkg" >> $GITHUB_ENV
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Build (release for ${{ env.TARGET }})
+        run: cargo build --workspace --all-features --release --target ${{ env.TARGET }}
+      - name: Note about tests
+        run: |
+          echo "Note: Tests for Windows are not run in CI at this time."
+
   coverage-tarpaulin:
     name: Coverage (tarpaulin) -> Codecov
     runs-on: ubuntu-latest

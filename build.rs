@@ -9,6 +9,149 @@
 use std::path::Path;
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+mod vcpkg_manager {
+    use std::path::PathBuf;
+    use std::process::Command;
+
+    /// Get or determine vcpkg root directory
+    pub fn get_vcpkg_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
+        // First check VCPKG_ROOT environment variable
+        if let Ok(root) = std::env::var("VCPKG_ROOT") {
+            return Ok(PathBuf::from(root));
+        }
+
+        // Check common installation paths
+        let common_paths = vec![
+            PathBuf::from("C:\\vcpkg"),
+            PathBuf::from(format!("{}\\vcpkg", std::env::var("USERPROFILE").unwrap_or_default())),
+            PathBuf::from(format!("{}\\scoop\\apps\\vcpkg\\current", std::env::var("USERPROFILE").unwrap_or_default())),
+        ];
+
+        for path in common_paths {
+            if path.exists() && path.join("vcpkg.exe").exists() {
+                println!("cargo:warning=Found vcpkg at: {}", path.display());
+                return Ok(path);
+            }
+        }
+
+        Err("vcpkg not found. Please install vcpkg or set VCPKG_ROOT environment variable".into())
+    }
+
+    /// Install vcpkg if not already installed
+    pub fn ensure_vcpkg_installed() -> Result<PathBuf, Box<dyn std::error::Error>> {
+        match get_vcpkg_root() {
+            Ok(root) => Ok(root),
+            Err(_) => {
+                println!("cargo:warning=vcpkg not found, attempting to clone from GitHub...");
+
+                // Clone vcpkg to a default location
+                let default_path = PathBuf::from("C:\\vcpkg");
+
+                // Create parent directory if needed
+                if let Some(parent) = default_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+
+                let status = Command::new("git")
+                    .arg("clone")
+                    .arg("https://github.com/Microsoft/vcpkg.git")
+                    .arg(&default_path)
+                    .status()?
+                    ;
+
+                if !status.success() {
+                    return Err("Failed to clone vcpkg".into());
+                }
+
+                println!("cargo:warning=Running vcpkg bootstrap...");
+
+                // Run bootstrap script
+                let bootstrap = default_path.join("bootstrap-vcpkg.bat");
+
+                let status = Command::new("cmd")
+                    .arg("/C")
+                    .arg(&bootstrap)
+                    .status()?;
+
+                if !status.success() {
+                    return Err("Failed to bootstrap vcpkg".into());
+                }
+
+                println!("cargo:warning=vcpkg installed successfully at: {}", default_path.display());
+                Ok(default_path)
+            }
+        }
+    }
+
+    /// Install a package via vcpkg
+    pub fn install_package(
+        vcpkg_root: &std::path::Path,
+        package: &str,
+        triplet: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        println!("cargo:warning=Installing {} for triplet {} via vcpkg...", package, triplet);
+
+        let vcpkg_exe = vcpkg_root.join("vcpkg.exe");
+        let status = Command::new(&vcpkg_exe)
+            .arg("install")
+            .arg(format!("{}:{}", package, triplet))
+            .status()?
+            ;
+
+        if status.success() {
+            println!("cargo:warning=Successfully installed {}", package);
+            Ok(())
+        } else {
+            Err(format!("Failed to install {}", package).into())
+        }
+    }
+
+    /// Ensure all required dependencies are installed via vcpkg
+    pub fn ensure_dependencies() -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let vcpkg_root = ensure_vcpkg_installed()?;
+
+        // Determine triplet from target
+        let target = std::env::var("TARGET").unwrap_or_default();
+        let triplet = if target.contains("x86_64") {
+            "x64-windows"
+        } else if target.contains("i686") {
+            "x86-windows"
+        } else if target.contains("aarch64") {
+            "arm64-windows"
+        } else {
+            return Err(format!("Unsupported target for vcpkg: {}", target).into());
+        };
+
+        println!("cargo:warning=Using vcpkg triplet: {}", triplet);
+
+        // List of required packages (matching versions available on vcpkg)
+        let packages = vec![
+            "cairo",
+            "pango",
+            "fontconfig",
+            "pkgconf",
+            "libpng",
+            "freetype",
+            "harfbuzz",
+            "pixman",
+            "libffi",
+            "pcre2",
+            "zlib",
+            "bzip2",
+            "lzo",
+        ];
+
+        // Install each package
+        for package in packages {
+            install_package(&vcpkg_root, package, triplet)?;
+        }
+
+        println!("cargo:warning=All vcpkg dependencies are installed");
+        Ok(vcpkg_root)
+    }
+}
+
 #[cfg(target_os = "macos")]
 mod homebrew {
     use std::path::Path;
@@ -233,6 +376,28 @@ mod cmake_builder {
         } else {
             Command::new("cmake")
         };
+        
+        // On Windows, add vcpkg toolchain
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(vcpkg_root) = vcpkg_manager::get_vcpkg_root() {
+                let toolchain = vcpkg_root.join("scripts/buildsystems/vcpkg.cmake");
+                println!("cargo:warning=Using vcpkg toolchain: {}", toolchain.display());
+                cmake_cmd.arg(format!("-DCMAKE_TOOLCHAIN_FILE={}", toolchain.display()));
+                
+                // Set the triplet
+                let triplet = if target.contains("x86_64") {
+                    "x64-windows"
+                } else if target.contains("i686") {
+                    "x86-windows"
+                } else if target.contains("aarch64") {
+                    "arm64-windows"
+                } else {
+                    "x64-windows"
+                };
+                cmake_cmd.arg(format!("-DVCPKG_TARGET_TRIPLET={}", triplet));
+            }
+        }
         
         // On macOS, explicitly set the target architecture
         #[cfg(target_os = "macos")]
@@ -617,11 +782,19 @@ fn main() {
     println!("cargo:rerun-if-changed=c++/");
     println!("cargo:rerun-if-changed=build.rs");
 
-    // Step 0: Ensure Homebrew dependencies on macOS
+    // Step 0: Ensure dependencies
     #[cfg(target_os = "macos")]
     {
         if let Err(e) = homebrew::ensure_dependencies() {
             eprintln!("Warning: Failed to ensure Homebrew dependencies: {}", e);
+            eprintln!("Continuing build, but some dependencies may be missing...");
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Err(e) = vcpkg_manager::ensure_dependencies() {
+            eprintln!("Warning: Failed to ensure vcpkg dependencies: {}", e);
             eprintln!("Continuing build, but some dependencies may be missing...");
         }
     }
