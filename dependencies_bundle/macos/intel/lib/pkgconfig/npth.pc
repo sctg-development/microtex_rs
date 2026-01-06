@@ -1,0 +1,13 @@
+prefix=${pcfiledir}/../..
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+api_version=1
+host=x86_64-apple-darwin23.6.0
+
+Name: npth
+Description: New GNU Portable Threads Library
+Version: 1.8
+Libs: -L${libdir} -lnpth  
+Cflags: -I${includedir} 
+URL: https://www.gnupg.org/software/npth/index.html

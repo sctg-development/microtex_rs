@@ -1,4 +1,4 @@
-prefix=/usr/local/Cellar/pango/1.57.0_1
+prefix=${pcfiledir}/../..
 includedir=${prefix}/include
 
 Name: Pango OT

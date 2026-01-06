@@ -63,7 +63,8 @@ cargo build
 Instead of vendoring and building all dependencies from source in the `main` branch, we support dependency bundles. For macOS Intel (local developer machine):
 
 ```bash
-brew install cairo pango fontconfig pkg-config lzo
+# Install all dev deps so the bundle contains required .pc files (libffi, zlib, graphite2, ...)
+brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2
 scripts/create_bundle_macos.sh
 ```
 

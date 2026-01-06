@@ -24,7 +24,8 @@ jobs:
       - name: Install dependencies (Homebrew packages)
         run: |
           brew update || true
-          brew install cairo pango fontconfig pkg-config lzo || true
+          # Ensure all build-time dependencies and their pkg-config files exist so the bundle is complete
+          brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
       - name: Create bundle (Apple Silicon)
         run: |
           DEST="${{ github.event.inputs.destination }}"

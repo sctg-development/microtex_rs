@@ -1,0 +1,13 @@
+prefix=${pcfiledir}/../..
+exec_prefix=/usr/local/Cellar/unbound/1.24.2
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: unbound
+Description: Library with validating, recursive, and caching DNS resolver
+URL: http://www.unbound.net
+Version: 1.24.2
+Requires.private:    libevent
+Libs: -L${libdir} -lunbound
+Libs.private: -lssl -levent -lpthread  -lcrypto -lnghttp2
+Cflags: -I${includedir}

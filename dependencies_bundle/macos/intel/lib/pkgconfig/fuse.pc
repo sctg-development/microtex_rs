@@ -1,0 +1,11 @@
+prefix=${pcfiledir}/../..
+exec_prefix=${prefix}
+libdir=${prefix}/lib
+includedir=${prefix}/include
+
+Name: fuse
+Description: Filesystem in Userspace
+Version: 2.9.9
+Libs: -L${libdir} -lfuse -pthread
+Libs.private:  -liconv -licucore -framework CoreFoundation -framework DiskArbitration
+Cflags: -I${includedir}/fuse -D_FILE_OFFSET_BITS=64

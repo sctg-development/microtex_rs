@@ -1,0 +1,1 @@
+../../../Cellar/xorgproto/2025.1/include/X11/extensions/XI2proto.h

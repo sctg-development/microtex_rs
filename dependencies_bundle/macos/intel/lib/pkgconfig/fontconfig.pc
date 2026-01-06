@@ -1,4 +1,4 @@
-prefix=/usr/local/Cellar/fontconfig/2.17.1
+prefix=${pcfiledir}/../..
 includedir=${prefix}/include
 libdir=${prefix}/lib
 

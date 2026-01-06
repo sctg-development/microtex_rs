@@ -500,7 +500,18 @@ fn main() {
             } else {
                 format!("{}:{}", pkgconfig_path.display(), prev)
             };
-            env::set_var("PKG_CONFIG_PATH", new);
+            // Ensure pkg-config searches the bundle first
+            env::set_var("PKG_CONFIG_PATH", new.clone());
+            // Also set PKG_CONFIG_LIBDIR to prefer the bundle .pc files while preserving any
+            // existing PKG_CONFIG_LIBDIR so missing system .pc files remain discoverable.
+            // Only set PKG_CONFIG_LIBDIR if it already exists so we don't hide system pkg-config
+            // search paths (when unset, pkg-config falls back to system dirs). This avoids making
+            // bundled .pc files the sole source of pkg-config info which can accidentally hide
+            // system-provided .pc files like zlib or expat.
+            if let Ok(prev_libdir) = env::var("PKG_CONFIG_LIBDIR") {
+                let new_libdir = format!("{}:{}", pkgconfig_path.display(), prev_libdir);
+                env::set_var("PKG_CONFIG_LIBDIR", new_libdir);
+            }
             println!("cargo:warning=Using dependency bundle at {}", bundle_dir.display());
         }
         let lib_dir = bundle_dir.join("lib");
@@ -578,10 +589,14 @@ fn main() {
     // Build MicroTeX C++ library using cmake with HAVE_CWRAPPER enabled
     let mut cmake_config = cmake::Config::new("./c++");
     
-    // Ensure CMake inherits PKG_CONFIG_PATH for vendored Cairo/Pango discovery
+    // Ensure CMake inherits PKG_CONFIG_PATH and PKG_CONFIG_LIBDIR for dependency bundle discovery
     if let Ok(pkg_config_path) = env::var("PKG_CONFIG_PATH") {
         eprintln!("Passing PKG_CONFIG_PATH to CMake: {}", pkg_config_path);
         cmake_config.env("PKG_CONFIG_PATH", &pkg_config_path);
+    }
+    if let Ok(pkg_config_libdir) = env::var("PKG_CONFIG_LIBDIR") {
+        eprintln!("Passing PKG_CONFIG_LIBDIR to CMake: {}", pkg_config_libdir);
+        cmake_config.env("PKG_CONFIG_LIBDIR", &pkg_config_libdir);
     }
     
     cmake_config
