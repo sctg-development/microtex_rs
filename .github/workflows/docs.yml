@@ -55,7 +55,22 @@ jobs:
         with:
           name: rust-docs
           path: rust-docs
-
+      # add a index.html that redirects to the main crate doc
+      - name: Add index.html
+        run: |
+          cat <<EOF > rust-docs/index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta http-equiv="refresh" content="0; url=./microtex_rs/index.html">
+              <title>MicroTeX Rust Documentation</title>
+          </head>
+          <body>
+              <p>Redirecting to <a href="./microtex_rs/index.html">MicroTeX Rust Documentation</a>...</p>
+          </body>
+          </html>
+          EOF
       - name: List downloaded files (debug)
         run: |
           ls -la rust-docs || true
