@@ -2,7 +2,7 @@
 
 [![codecov](https://codecov.io/gh/sctg-development/microtex_rs/branch/main/graph/badge.svg)](https://codecov.io/gh/sctg-development/microtex_rs)
 
-Safe Rust bindings for [MicroTeX](https://github.com/alex-massal/MicroTeX), a lightweight LaTeX interpreter that can render mathematical formulas to SVG format.
+Safe Rust bindings for [MicroTeX](https://github.com/NanoMichael/MicroTeX), a lightweight LaTeX interpreter that can render mathematical formulas to SVG format.
 
 ## Features
 
@@ -56,7 +56,7 @@ scripts/create_bundle_macos.sh
 This will produce `dependencies_bundle/macos/intel` (or use `MICROTEX_BUNDLE_DIR` to point elsewhere). Commit the bundle or point the build to it via `MICROTEX_BUNDLE_DIR`.
 ## Quick Start
 
-```rust,ignore
+```rust
 use microtex_rs::{MicroTex, RenderConfig};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -79,7 +79,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Advanced Configuration
 
-```rust,ignore
+```rust
 use microtex_rs::{MicroTex, RenderConfig};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -106,7 +106,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write("wave_equation.svg", svg)?;
     
     Ok(())
-}
 }
 ```
 

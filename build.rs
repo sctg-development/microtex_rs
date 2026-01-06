@@ -6,6 +6,7 @@
 //! 3. Embeds CLM font data as Rust code
 //! 4. Links the compiled library to the Rust crate
 
+use sha2::Digest;
 use std::path::Path;
 use std::process::Command;
 
@@ -24,8 +25,14 @@ mod vcpkg_manager {
         // Check common installation paths
         let common_paths = vec![
             PathBuf::from("C:\\vcpkg"),
-            PathBuf::from(format!("{}\\vcpkg", std::env::var("USERPROFILE").unwrap_or_default())),
-            PathBuf::from(format!("{}\\scoop\\apps\\vcpkg\\current", std::env::var("USERPROFILE").unwrap_or_default())),
+            PathBuf::from(format!(
+                "{}\\vcpkg",
+                std::env::var("USERPROFILE").unwrap_or_default()
+            )),
+            PathBuf::from(format!(
+                "{}\\scoop\\apps\\vcpkg\\current",
+                std::env::var("USERPROFILE").unwrap_or_default()
+            )),
         ];
 
         for path in common_paths {
@@ -57,8 +64,7 @@ mod vcpkg_manager {
                     .arg("clone")
                     .arg("https://github.com/Microsoft/vcpkg.git")
                     .arg(&default_path)
-                    .status()?
-                    ;
+                    .status()?;
 
                 if !status.success() {
                     return Err("Failed to clone vcpkg".into());
@@ -69,16 +75,16 @@ mod vcpkg_manager {
                 // Run bootstrap script
                 let bootstrap = default_path.join("bootstrap-vcpkg.bat");
 
-                let status = Command::new("cmd")
-                    .arg("/C")
-                    .arg(&bootstrap)
-                    .status()?;
+                let status = Command::new("cmd").arg("/C").arg(&bootstrap).status()?;
 
                 if !status.success() {
                     return Err("Failed to bootstrap vcpkg".into());
                 }
 
-                println!("cargo:warning=vcpkg installed successfully at: {}", default_path.display());
+                println!(
+                    "cargo:warning=vcpkg installed successfully at: {}",
+                    default_path.display()
+                );
                 Ok(default_path)
             }
         }
@@ -90,14 +96,16 @@ mod vcpkg_manager {
         package: &str,
         triplet: &str,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        println!("cargo:warning=Installing {} for triplet {} via vcpkg...", package, triplet);
+        println!(
+            "cargo:warning=Installing {} for triplet {} via vcpkg...",
+            package, triplet
+        );
 
         let vcpkg_exe = vcpkg_root.join("vcpkg.exe");
         let status = Command::new(&vcpkg_exe)
             .arg("install")
             .arg(format!("{}:{}", package, triplet))
-            .status()?
-            ;
+            .status()?;
 
         if status.success() {
             println!("cargo:warning=Successfully installed {}", package);
@@ -183,7 +191,8 @@ mod homebrew {
         println!("cargo:warning=Installing Homebrew x86_64...");
 
         // Download the install script
-        let install_script_url = "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh";
+        let install_script_url =
+            "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh";
         let script_content = reqwest::blocking::Client::new()
             .get(install_script_url)
             .send()?
@@ -227,10 +236,7 @@ mod homebrew {
                 .arg(package)
                 .status()
         } else {
-            Command::new(brew_path)
-                .arg("list")
-                .arg(package)
-                .status()
+            Command::new(brew_path).arg("list").arg(package).status()
         };
 
         status.map(|s| s.success()).unwrap_or(false)
@@ -238,7 +244,10 @@ mod homebrew {
 
     /// Install a Homebrew package for the target architecture
     fn install_package(package: &str, arch: &str) -> Result<(), Box<dyn std::error::Error>> {
-        println!("cargo:warning=Installing {} via Homebrew ({})", package, arch);
+        println!(
+            "cargo:warning=Installing {} via Homebrew ({})",
+            package, arch
+        );
 
         let brew_path = match arch {
             "x86_64" => "/usr/local/bin/brew",
@@ -359,7 +368,7 @@ mod cmake_builder {
             let current_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
             target.contains("x86_64") && current_arch != "x86_64"
         };
-        
+
         #[cfg(not(target_os = "macos"))]
         let use_arch_x86_64 = false;
 
@@ -376,15 +385,18 @@ mod cmake_builder {
         } else {
             Command::new("cmake")
         };
-        
+
         // On Windows, add vcpkg toolchain
         #[cfg(target_os = "windows")]
         {
-            if let Ok(vcpkg_root) = vcpkg_manager::get_vcpkg_root() {
+            if let Ok(vcpkg_root) = crate::vcpkg_manager::get_vcpkg_root() {
                 let toolchain = vcpkg_root.join("scripts/buildsystems/vcpkg.cmake");
-                println!("cargo:warning=Using vcpkg toolchain: {}", toolchain.display());
+                println!(
+                    "cargo:warning=Using vcpkg toolchain: {}",
+                    toolchain.display()
+                );
                 cmake_cmd.arg(format!("-DCMAKE_TOOLCHAIN_FILE={}", toolchain.display()));
-                
+
                 // Set the triplet
                 let triplet = if target.contains("x86_64") {
                     "x64-windows"
@@ -398,7 +410,7 @@ mod cmake_builder {
                 cmake_cmd.arg(format!("-DVCPKG_TARGET_TRIPLET={}", triplet));
             }
         }
-        
+
         // On macOS, explicitly set the target architecture
         #[cfg(target_os = "macos")]
         {
@@ -450,9 +462,11 @@ mod cmake_builder {
     }
 
     /// Find all static libraries (.a files) in the build output
-    pub fn find_static_libraries(build_dir: &Path) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
+    pub fn find_static_libraries(
+        build_dir: &Path,
+    ) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
         let mut libs = Vec::new();
-        
+
         // Walk the build directory looking for .a files
         for entry in walkdir::WalkDir::new(build_dir)
             .into_iter()
@@ -470,9 +484,9 @@ mod cmake_builder {
 }
 
 mod bindgen_builder {
-    use std::path::{Path, PathBuf};
     use std::fs::File;
     use std::io::Write;
+    use std::path::{Path, PathBuf};
 
     /// Generate FFI bindings using bindgen
     pub fn generate_bindings(
@@ -552,9 +566,9 @@ void microtex_free_buffer(void* ptr);
 }
 
 mod fonts_embedder {
-    use std::path::{Path, PathBuf};
     use std::fs::File;
     use std::io::Write;
+    use std::path::{Path, PathBuf};
 
     /// Embed CLM font files as Rust code
     pub fn embed_fonts(res_dir: &Path, out_dir: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -607,10 +621,7 @@ mod fonts_embedder {
 
         // First, generate all the static font data constants BEFORE the match function
         for (file_name, path) in &fonts_list {
-            let const_name = file_name
-                .to_uppercase()
-                .replace(".", "_")
-                .replace("-", "_");
+            let const_name = file_name.to_uppercase().replace(".", "_").replace("-", "_");
 
             let font_data = std::fs::read(path)?;
             rust_code.push_str(&format!(
@@ -638,12 +649,12 @@ mod fonts_embedder {
         rust_code.push_str("    match name {\n");
 
         for (file_name, _) in &fonts_list {
-            let const_name = file_name
-                .to_uppercase()
-                .replace(".", "_")
-                .replace("-", "_");
+            let const_name = file_name.to_uppercase().replace(".", "_").replace("-", "_");
 
-            rust_code.push_str(&format!("        \"{}\" => Some(&{}),\n", file_name, const_name));
+            rust_code.push_str(&format!(
+                "        \"{}\" => Some(&{}),\n",
+                file_name, const_name
+            ));
         }
 
         rust_code.push_str("        _ => None,\n");
@@ -659,7 +670,10 @@ mod fonts_embedder {
         file.write_all(rust_code.as_bytes())?;
 
         println!("cargo:warning=Embedded {} fonts", fonts_found);
-        println!("cargo:warning=Fonts module generated: {}", out_path.display());
+        println!(
+            "cargo:warning=Fonts module generated: {}",
+            out_path.display()
+        );
         Ok(())
     }
 }
@@ -718,7 +732,7 @@ mod linker_config {
         {
             if output.success() {
                 println!("cargo:warning=Found cairo via pkg-config");
-                
+
                 if let Ok(libs_output) = Command::new("pkg-config")
                     .arg("--libs")
                     .arg("--static")
@@ -728,8 +742,11 @@ mod linker_config {
                     .output()
                 {
                     let libs_str = String::from_utf8_lossy(&libs_output.stdout);
-                    println!("cargo:warning=Cairo/Pango linker flags: {}", libs_str.trim());
-                    
+                    println!(
+                        "cargo:warning=Cairo/Pango linker flags: {}",
+                        libs_str.trim()
+                    );
+
                     for flag in libs_str.split_whitespace() {
                         if flag.starts_with("-l") {
                             let lib_name = &flag[2..];
@@ -754,7 +771,7 @@ mod linker_config {
                     {
                         let libs_str = String::from_utf8_lossy(&libs_output.stdout);
                         println!("cargo:warning=Cairo linker flags: {}", libs_str.trim());
-                        
+
                         for flag in libs_str.split_whitespace() {
                             if flag.starts_with("-l") {
                                 let lib_name = &flag[2..];
@@ -779,8 +796,60 @@ mod linker_config {
 }
 
 fn main() {
-    println!("cargo:rerun-if-changed=c++/");
+    // Always watch build.rs itself
     println!("cargo:rerun-if-changed=build.rs");
+
+    // Recursively emit "rerun-if-changed" for all files under c++/ (except the c++/build output dir)
+    let cpp_dir = build_config::cpp_dir();
+    let mut newest_src_mtime = std::time::SystemTime::UNIX_EPOCH;
+
+    // Build a hash of all source files (paths + mtimes) so we can skip rebuilds reliably
+    let mut hasher = sha2::Sha256::new();
+
+    if cpp_dir.exists() {
+        for entry in walkdir::WalkDir::new(&cpp_dir)
+            .into_iter()
+            .filter_map(|e| e.ok())
+        {
+            let path = entry.path();
+            // Skip build directory inside c++ (build artifacts)
+            if path.starts_with(cpp_dir.join("build")) {
+                continue;
+            }
+
+            // Emit a rerun-if-changed for each source file/directory
+            println!("cargo:rerun-if-changed={}", path.display());
+
+            if let Ok(meta) = path.metadata() {
+                if let Ok(mtime) = meta.modified() {
+                    if mtime > newest_src_mtime {
+                        newest_src_mtime = mtime;
+                    }
+
+                    if meta.is_file() {
+                        // Prefer relative paths for stable hashing
+                        if let Ok(rel) = path.strip_prefix(&cpp_dir) {
+                            hasher.update(rel.to_string_lossy().as_bytes());
+                        } else {
+                            hasher.update(path.to_string_lossy().as_bytes());
+                        }
+
+                        let mtime_secs = mtime
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_secs();
+                        hasher.update(mtime_secs.to_string().as_bytes());
+                    }
+                }
+            }
+        }
+    } else {
+        // If c++ doesn't exist, still emit the directory so Cargo knows about it
+        println!("cargo:rerun-if-changed=c++/");
+    }
+
+    let cpp_hash = format!("{:x}", hasher.finalize());
+    let out_dir = build_config::out_dir();
 
     // Step 0: Ensure dependencies
     #[cfg(target_os = "macos")]
@@ -793,20 +862,61 @@ fn main() {
 
     #[cfg(target_os = "windows")]
     {
-        if let Err(e) = vcpkg_manager::ensure_dependencies() {
+        if let Err(e) = crate::vcpkg_manager::ensure_dependencies() {
             eprintln!("Warning: Failed to ensure vcpkg dependencies: {}", e);
             eprintln!("Continuing build, but some dependencies may be missing...");
         }
     }
 
-    // Step 1: Build the C++ library with CMake
-    let cpp_dir = build_config::cpp_dir();
+    // Step 1: Build the C++ library with CMake (only if needed)
     let build_dir = build_config::build_dir();
     let out_dir = build_config::out_dir();
 
-    if let Err(e) = cmake_builder::build(&cpp_dir, &build_dir) {
-        eprintln!("Error building C++ library: {}", e);
-        std::process::exit(1);
+    // Determine whether the static library already exists and whether sources changed (using hash stamp)
+    let lib_path = build_dir.join("lib").join("libmicrotex.a");
+    let mut need_build = true;
+
+    // Read previous hash from stamp file (if any)
+    let stamp_file = out_dir.join("microtex_cpp.hash");
+    let prev_hash = std::fs::read_to_string(&stamp_file).unwrap_or_default();
+
+    if lib_path.exists() && !prev_hash.is_empty() {
+        if prev_hash == cpp_hash {
+            println!(
+                "cargo:warning=Static library is up-to-date (hash matched), skipping C++ build"
+            );
+            need_build = false;
+        }
+    }
+
+    // Fallback conservative check using mtimes if no stamp found
+    if need_build && lib_path.exists() {
+        if let Ok(lib_meta) = lib_path.metadata() {
+            if let Ok(lib_mtime) = lib_meta.modified() {
+                if let Ok(build_rs_meta) = std::fs::metadata("build.rs") {
+                    if let Ok(build_rs_mtime) = build_rs_meta.modified() {
+                        if lib_mtime >= newest_src_mtime && lib_mtime >= build_rs_mtime {
+                            println!("cargo:warning=Static library is up-to-date by mtime, skipping C++ build");
+                            need_build = false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if need_build {
+        if let Err(e) = cmake_builder::build(&cpp_dir, &build_dir) {
+            eprintln!("Error building C++ library: {}", e);
+            std::process::exit(1);
+        }
+
+        // After a successful build, write the stamp
+        if let Err(e) = std::fs::write(&stamp_file, &cpp_hash) {
+            eprintln!("Warning: failed to write build stamp: {}", e);
+        }
+    } else {
+        println!("cargo:warning=Skipping C++ build (up-to-date)");
     }
 
     // Step 2: Find the compiled static libraries
@@ -844,4 +954,3 @@ fn main() {
 
     println!("cargo:warning=Build script completed successfully!");
 }
-

@@ -204,7 +204,10 @@ mod shim {
             }
         }
 
-        pub unsafe fn microtex_render_to_svg(_render_ptr: *mut c_void, out_len: &mut u64) -> *mut u8 {
+        pub unsafe fn microtex_render_to_svg(
+            _render_ptr: *mut c_void,
+            out_len: &mut u64,
+        ) -> *mut u8 {
             if crate::test_control::get_return_empty() {
                 *out_len = 0;
                 std::ptr::null_mut()
@@ -345,7 +348,9 @@ pub mod test_helpers {
 
     // When compiled for tests, re-export the test_control helpers (always available)
     #[cfg(test)]
-    pub use crate::test_control::{lock_test, set_buffer, set_init_succeed, set_parse_succeed, set_return_empty};
+    pub use crate::test_control::{
+        lock_test, set_buffer, set_init_succeed, set_parse_succeed, set_return_empty,
+    };
 }
 
 /// Errors that can occur when rendering LaTeX to SVG.
@@ -419,7 +424,7 @@ impl Default for RenderConfig {
 ///
 /// # Example
 ///
-/// ```ignore
+/// ```rust
 /// use microtex_rs::{MicroTex, RenderConfig};
 ///
 /// // Create a new renderer with embedded fonts
@@ -459,7 +464,7 @@ impl MicroTex {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```rust
     /// use microtex_rs::MicroTex;
     ///
     /// let renderer = MicroTex::new()?;
@@ -539,7 +544,7 @@ impl MicroTex {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```rust
     /// use microtex_rs::{MicroTex, RenderConfig};
     ///
     /// let renderer = MicroTex::new()?;
@@ -618,7 +623,10 @@ mod tests {
         assert!(!clms.is_empty());
         // At least one math font should be available
         let has_math = clms.iter().any(|&name| {
-            name.contains("Math") || name.contains("math") || name.contains("XITS") || name.contains("Fira")
+            name.contains("Math")
+                || name.contains("math")
+                || name.contains("XITS")
+                || name.contains("Fira")
         });
         assert!(
             has_math,
@@ -714,5 +722,37 @@ mod tests {
         assert!(r.is_ok());
         assert!(r.unwrap().contains("<svg"));
     }
-}
 
+    #[test]
+    fn test_multiple_renders_same_instance() {
+        // This test reproduces the SIGSEGV crash when calling render() multiple times
+        // on the same MicroTex instance. The issue is related to resource cleanup
+        // or reuse of the underlying C++ MicroTeX library.
+        let _g = crate::shim::lock_test();
+        crate::shim::set_init_succeed(true);
+        crate::shim::set_parse_succeed(true);
+        crate::shim::set_return_empty(false);
+        crate::shim::set_buffer(b"<svg>result1</svg>");
+
+        let m = MicroTex::new().expect("init ok");
+
+        // First render - should succeed
+        let r1 = m.render("x^2", &RenderConfig::default());
+        assert!(r1.is_ok());
+        assert!(r1.unwrap().contains("result1"));
+
+        // Update buffer for second render
+        crate::shim::set_buffer(b"<svg>result2</svg>");
+
+        // Second render on the SAME instance - this triggers the crash
+        let r2 = m.render("y^2", &RenderConfig::default());
+        assert!(r2.is_ok());
+        assert!(r2.unwrap().contains("result2"));
+
+        // Third render - verify the issue persists with multiple calls
+        crate::shim::set_buffer(b"<svg>result3</svg>");
+        let r3 = m.render("z^2", &RenderConfig::default());
+        assert!(r3.is_ok());
+        assert!(r3.unwrap().contains("result3"));
+    }
+}
