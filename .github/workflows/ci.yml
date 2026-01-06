@@ -63,7 +63,7 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          arch -arm64 /usr/local/bin/brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
+          brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
