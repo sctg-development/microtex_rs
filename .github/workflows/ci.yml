@@ -24,9 +24,7 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          alias brew_arm="arch -arm64 /opt/homebrew/bin/brew"
-          alias brew_x86="arch -x86_64 /usr/local/bin/brew"
-          brew_x86 install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
+          arch -x86_64 /usr/local/bin/brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
       # install meson and nija with --break-system-packages
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -63,9 +61,7 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          alias brew_arm="arch -arm64 /opt/homebrew/bin/brew"
-          alias brew_x86="arch -x86_64 /usr/local/bin/brew"
-          brew_arm install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
+          arch -arm64 /usr/local/bin/brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
