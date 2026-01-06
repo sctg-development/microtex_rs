@@ -28,7 +28,7 @@ By default, `microtex_rs` will attempt to use system-installed graphics librarie
 
 ```bash
 # macOS
-brew install cairo pango fontconfig pkg-config
+brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2
 
 # Ubuntu/Debian
 sudo apt-get install libcairo2-dev libpango-1.0-0 libpango1.0-dev libfontconfig1-dev pkg-config
@@ -44,7 +44,7 @@ The `main` branch prefers system libraries or prebuilt dependency bundles. To cr
 1. Install required packages with Homebrew:
 
 ```bash
-brew install cairo pango fontconfig pkg-config lzo
+brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2
 ```
 
 2. Run the helper script to collect the installed files into a bundle:

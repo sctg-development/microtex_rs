@@ -7,6 +7,162 @@
 //! 4. Links the compiled library to the Rust crate
 
 use std::path::Path;
+use std::process::Command;
+
+#[cfg(target_os = "macos")]
+mod homebrew {
+    use std::path::Path;
+    use std::process::Command;
+
+    /// Check if Homebrew is installed for the target architecture
+    fn is_homebrew_installed(arch: &str) -> bool {
+        let brew_path = match arch {
+            "x86_64" => "/usr/local/bin/brew",
+            "arm64" => "/opt/homebrew/bin/brew",
+            _ => return false,
+        };
+
+        Command::new("test")
+            .arg("-f")
+            .arg(brew_path)
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+    }
+
+    /// Install Homebrew for x86_64 if not already installed
+    fn install_homebrew_x86_64() -> Result<(), Box<dyn std::error::Error>> {
+        if is_homebrew_installed("x86_64") {
+            println!("cargo:warning=Homebrew x86_64 already installed");
+            return Ok(());
+        }
+
+        println!("cargo:warning=Installing Homebrew x86_64...");
+
+        // Download the install script
+        let install_script_url = "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh";
+        let script_content = reqwest::blocking::Client::new()
+            .get(install_script_url)
+            .send()?
+            .text()?;
+
+        // Write script to temp file
+        let temp_script = "/tmp/brew_install.sh";
+        std::fs::write(temp_script, script_content)?;
+
+        // Run under x86_64 arch
+        let status = Command::new("arch")
+            .arg("-x86_64")
+            .arg("/bin/bash")
+            .arg(temp_script)
+            .status()?;
+
+        // Clean up
+        let _ = std::fs::remove_file(temp_script);
+
+        if status.success() {
+            println!("cargo:warning=Homebrew x86_64 installed successfully");
+            Ok(())
+        } else {
+            Err("Failed to install Homebrew x86_64".into())
+        }
+    }
+
+    /// Check if a package is installed via Homebrew
+    fn is_package_installed(package: &str, arch: &str) -> bool {
+        let brew_path = match arch {
+            "x86_64" => "/usr/local/bin/brew",
+            "arm64" => "/opt/homebrew/bin/brew",
+            _ => return false,
+        };
+
+        let status = if arch == "x86_64" {
+            Command::new("arch")
+                .arg("-x86_64")
+                .arg(brew_path)
+                .arg("list")
+                .arg(package)
+                .status()
+        } else {
+            Command::new(brew_path)
+                .arg("list")
+                .arg(package)
+                .status()
+        };
+
+        status.map(|s| s.success()).unwrap_or(false)
+    }
+
+    /// Install a Homebrew package for the target architecture
+    fn install_package(package: &str, arch: &str) -> Result<(), Box<dyn std::error::Error>> {
+        println!("cargo:warning=Installing {} via Homebrew ({})", package, arch);
+
+        let brew_path = match arch {
+            "x86_64" => "/usr/local/bin/brew",
+            "arm64" => "/opt/homebrew/bin/brew",
+            _ => return Err("Unsupported architecture".into()),
+        };
+
+        let status = if arch == "x86_64" {
+            Command::new("arch")
+                .arg("-x86_64")
+                .arg(brew_path)
+                .arg("install")
+                .arg(package)
+                .status()?
+        } else {
+            Command::new(brew_path)
+                .arg("install")
+                .arg(package)
+                .status()?
+        };
+
+        if status.success() {
+            println!("cargo:warning=Successfully installed {}", package);
+            Ok(())
+        } else {
+            Err(format!("Failed to install {}", package).into())
+        }
+    }
+
+    /// Ensure all required dependencies are installed
+    pub fn ensure_dependencies() -> Result<(), Box<dyn std::error::Error>> {
+        #[cfg(target_arch = "x86_64")]
+        let target_arch = "x86_64";
+        #[cfg(target_arch = "aarch64")]
+        let target_arch = "arm64";
+
+        // For x86_64, make sure Homebrew is installed
+        #[cfg(target_arch = "x86_64")]
+        {
+            if !is_homebrew_installed("x86_64") {
+                install_homebrew_x86_64()?;
+            }
+        }
+
+        // List of required packages
+        let packages = vec![
+            "cairo",
+            "pango",
+            "fontconfig",
+            "pkg-config",
+            "libpng",
+            "freetype",
+            "harfbuzz",
+            "pixman",
+        ];
+
+        // Check and install missing packages
+        for package in packages {
+            if !is_package_installed(package, target_arch) {
+                install_package(package, target_arch)?;
+            }
+        }
+
+        println!("cargo:warning=All Homebrew dependencies are installed");
+        Ok(())
+    }
+}
 
 mod build_config {
     use std::path::PathBuf;
@@ -50,8 +206,47 @@ mod cmake_builder {
         println!("cargo:warning=CMake directory: {}", cpp_dir.display());
         println!("cargo:warning=Build directory: {}", build_dir.display());
 
+        // Detect target architecture from Cargo environment
+        let target = std::env::var("TARGET").unwrap_or_default();
+        println!("cargo:warning=Target: {}", target);
+
+        // Determine if we need to use arch -x86_64 (cross-compilation on macOS arm64)
+        #[cfg(target_os = "macos")]
+        let use_arch_x86_64 = {
+            let current_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+            target.contains("x86_64") && current_arch != "x86_64"
+        };
+        
+        #[cfg(not(target_os = "macos"))]
+        let use_arch_x86_64 = false;
+
+        if use_arch_x86_64 {
+            println!("cargo:warning=Cross-compiling for x86_64 on arm64, using arch -x86_64");
+        }
+
         // Configure with CMake
-        let status = Command::new("cmake")
+        let mut cmake_cmd = if use_arch_x86_64 {
+            let mut cmd = Command::new("arch");
+            cmd.arg("-x86_64");
+            cmd.arg("cmake");
+            cmd
+        } else {
+            Command::new("cmake")
+        };
+        
+        // On macOS, explicitly set the target architecture
+        #[cfg(target_os = "macos")]
+        {
+            if target.contains("x86_64") {
+                println!("cargo:warning=Configuring CMake for x86_64 architecture...");
+                cmake_cmd.arg("-DCMAKE_OSX_ARCHITECTURES=x86_64");
+            } else if target.contains("aarch64") || target.contains("arm64") {
+                println!("cargo:warning=Configuring CMake for arm64 architecture...");
+                cmake_cmd.arg("-DCMAKE_OSX_ARCHITECTURES=arm64");
+            }
+        }
+
+        let status = cmake_cmd
             .arg("-DCAIRO=ON")
             .arg("-DHAVE_CAIRO=ON")
             .arg("-DBUILD_STATIC=ON")
@@ -67,11 +262,19 @@ mod cmake_builder {
 
         // Build with make
         let num_jobs = num_cpus::get();
-        let status = Command::new("make")
-            .arg(format!("-j{}", num_jobs))
-            .current_dir(build_dir)
-            .status()
-            .map_err(|e| format!("Failed to run make: {}", e))?;
+        let status = if use_arch_x86_64 {
+            Command::new("arch")
+                .arg("-x86_64")
+                .arg("make")
+                .arg(format!("-j{}", num_jobs))
+                .current_dir(build_dir)
+                .status()?
+        } else {
+            Command::new("make")
+                .arg(format!("-j{}", num_jobs))
+                .current_dir(build_dir)
+                .status()?
+        };
 
         if !status.success() {
             return Err("CMake build failed".into());
@@ -413,6 +616,15 @@ mod linker_config {
 fn main() {
     println!("cargo:rerun-if-changed=c++/");
     println!("cargo:rerun-if-changed=build.rs");
+
+    // Step 0: Ensure Homebrew dependencies on macOS
+    #[cfg(target_os = "macos")]
+    {
+        if let Err(e) = homebrew::ensure_dependencies() {
+            eprintln!("Warning: Failed to ensure Homebrew dependencies: {}", e);
+            eprintln!("Continuing build, but some dependencies may be missing...");
+        }
+    }
 
     // Step 1: Build the C++ library with CMake
     let cpp_dir = build_config::cpp_dir();
