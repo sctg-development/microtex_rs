@@ -24,11 +24,8 @@ bindgen = "0.72.1"
 sha2 = "0.10"
 
 [features]
-# Build and statically link a vendored Cairo (and minimal deps) when enabled.
-# Use environment variable `MICROTEX_USE_SYSTEM_CAIRO=1` to prefer system libraries.
-vendored-cairo = []
-vendored-pango = []
-
+# Vendoring removed from main branch. Use system libraries or dependency bundles.
+# To experiment with the old vendored flow, see the `vendored` branch.
 [dev-dependencies]
 pretty_assertions = "1"
 env_logger = "0.11"

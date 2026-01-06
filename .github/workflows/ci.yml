@@ -15,6 +15,7 @@ jobs:
     runs-on: macos-latest
     env:
       TARGET: x86_64-apple-darwin
+      MICROTEX_BUNDLE_DIR: dependencies_bundle/macos/intel
     steps:
       - uses: actions/checkout@v6
       - name: Install dependencies for pkg-config
@@ -35,36 +36,7 @@ jobs:
         run: rustup target add $TARGET
       - name: Build (release for $TARGET)
         run: cargo build --workspace --all-features --release --target $TARGET
-      - name: Note about tests
-        run: |
-          echo "Cross-compiling for $TARGET; running tests for the build target is not supported on this runner."
 
-      - name: Collect Meson logs (if failure)
-        if: failure()
-        shell: bash
-        run: |
-          set -eu
-          echo "Searching for meson logs..."
-          find . -type f -name 'meson-log.txt' -path '*/vendored/*/build/meson-logs/meson-log.txt' -print > meson-log-paths.txt || true
-          if [ ! -s meson-log-paths.txt ]; then
-            echo "No meson logs found"
-            exit 0
-          fi
-          mkdir -p meson-logs
-          while IFS= read -r p; do
-            fn=$(echo "$p" | sed 's|[./]|_|g' | sed 's|__|_|g')
-            cp "$p" "meson-logs/$fn" || cp "$p" "meson-logs/$(basename $p)"
-            echo "Copied $p -> meson-logs/$fn"
-          done < meson-log-paths.txt
-          ls -la meson-logs || true
-
-      - name: Upload Meson logs artifact
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: meson-logs-${{ env.TARGET }}
-          path: meson-logs
-          retention-days: 7
 
   build-macos-arm64:
     name: Build macOS (arm64)

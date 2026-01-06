@@ -1,0 +1,8 @@
+prefix=/usr/local/Cellar/cairo/1.18.4
+includedir=${prefix}/include
+
+Name: cairo-xcb
+Description: XCB surface backend for cairo graphics library
+Version: 1.18.4
+Requires: cairo, xcb >=  1.6, xcb-render >=  1.6
+Cflags: -I${includedir}

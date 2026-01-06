@@ -37,17 +37,23 @@ sudo apt-get install libcairo2-dev libpango-1.0-0 libpango1.0-dev libfontconfig1
 sudo dnf install cairo-devel pango-devel fontconfig-devel pkg-config
 ```
 
-### Vendored Dependencies (Optional)
+### Dependency Bundles
 
-If you prefer to build and statically link all dependencies, enable the `vendored-cairo` feature:
+The `main` branch prefers system libraries or prebuilt dependency bundles. To create a macOS Intel bundle locally:
 
-```toml
-[dependencies]
-microtex_rs = { version = "0.1", features = ["vendored-cairo"] }
+1. Install required packages with Homebrew:
+
+```bash
+brew install cairo pango fontconfig pkg-config lzo
 ```
 
-This will automatically download and build Cairo and its minimal dependencies.
+2. Run the helper script to collect the installed files into a bundle:
 
+```bash
+scripts/create_bundle_macos.sh
+```
+
+This will produce `dependencies_bundle/macos/intel` (or use `MICROTEX_BUNDLE_DIR` to point elsewhere). Commit the bundle or point the build to it via `MICROTEX_BUNDLE_DIR`.
 ## Quick Start
 
 ```rust,ignore

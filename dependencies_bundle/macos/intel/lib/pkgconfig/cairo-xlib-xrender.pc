@@ -1,0 +1,8 @@
+prefix=/usr/local/Cellar/cairo/1.18.4
+includedir=${prefix}/include
+
+Name: cairo-xlib-xrender
+Description: Xlib Xrender surface backend for cairo graphics library
+Version: 1.18.4
+Requires: cairo, xrender >=  0.6
+Cflags: -I${includedir}

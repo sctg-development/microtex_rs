@@ -1,0 +1,38 @@
+name: Capture macOS Apple Silicon Bundle
+
+# Manually-triggered workflow to create a dependency bundle for macOS (arm64)
+# and upload it as an artifact for manual download and inclusion in the repo.
+on:
+  workflow_dispatch:
+    inputs:
+      destination:
+        description: 'Target path inside the repo to create the bundle'
+        required: false
+        default: 'dependencies_bundle/macos/apple_silicon'
+
+permissions:
+  contents: read
+
+jobs:
+  capture-bundle-macos-arm64:
+    name: Capture bundle (macOS arm64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Ensure script is executable
+        run: chmod +x scripts/create_bundle_macos.sh
+      - name: Install dependencies (Homebrew packages)
+        run: |
+          brew update || true
+          brew install cairo pango fontconfig pkg-config lzo || true
+      - name: Create bundle (Apple Silicon)
+        run: |
+          DEST="${{ github.event.inputs.destination }}"
+          ./scripts/create_bundle_macos.sh "$DEST"
+          # Zip the bundle for artifact upload
+          zip -r "microtex-bundle-macos-arm64.zip" "$DEST"
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: microtex-bundle-macos-arm64
+          path: microtex-bundle-macos-arm64.zip

@@ -319,119 +319,11 @@ fn meson_build_and_install(src_dir: &Path, install_dir: &Path, meson_args: &[&st
     }
 }
 
-/// Build a sequence of core dependencies (pixman, freetype, harfbuzz, fontconfig, cairo)
-/// Returns true if we performed a successful vendored build.
-fn vendor_core_deps(out_dir: &Path) -> bool {
-    let vendored = out_dir.join("vendored");
-    let install_dir = vendored.join("deps-install");
-    let _ = std::fs::create_dir_all(&vendored);
-
-    // Define packages (name, tar_name, url, meson args)
-    let pkgs: &[(&str, &str, &str, &[&str])] = &[
-        (
-            "pixman",
-            "pixman-0.46.4.tar.xz",
-            "https://www.cairographics.org/releases/pixman-0.46.4.tar.xz",
-            &["-Ddefault_library=static", "-Dtests=disabled"],
-        ),
-        (
-            "freetype",
-            "freetype-2.12.1.tar.gz",
-            "https://download.savannah.gnu.org/releases/freetype/freetype-2.12.1.tar.gz",
-            &["-Ddefault_library=static", "-Ddocs=false"],
-        ),
-        (
-            "harfbuzz",
-            "harfbuzz-2.9.1.tar.xz",
-            "https://github.com/harfbuzz/harfbuzz/releases/download/2.9.1/harfbuzz-2.9.1.tar.xz",
-            &["-Ddefault_library=static", "-Ddocs=disabled"],
-        ),
-        (
-            "fontconfig",
-            "fontconfig-2.14.2.tar.gz",
-            "https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.14.2.tar.gz",
-            &["-Ddefault_library=static", "-Ddocdir=disabled"],
-        ),
-        (
-            "cairo",
-            "cairo-1.18.4.tar.gz",
-            "https://gitlab.freedesktop.org/cairo/cairo/-/archive/1.18.4/cairo-1.18.4.tar.gz",
-            &[
-                "-Ddefault_library=static",
-                "-Dtests=disabled",
-                "-Dxlib=disabled",
-                "-Dquartz=enabled",
-                "-Dfontconfig=enabled",
-                "-Dpng=enabled",
-                "-Dfreetype=enabled",
-            ],
-        ),
-    ];
-
-    for (name, tar_name, url, meson_args) in pkgs.iter() {
-        let tarball = vendored.join(tar_name);
-        let src_dir = vendored.join(format!("{}-src", name));
-        // download
-        download_to(url, &tarball);
-        // verify optional env var e.g. MICROTEX_<NAME>_SHA256
-        let env_var = format!("MICROTEX_{}_SHA256", name.to_uppercase());
-        if let Ok(expected) = env::var(&env_var) {
-            use sha2::{Digest, Sha256};
-            let data = std::fs::read(&tarball).expect("read downloaded tarball");
-            let digest = Sha256::digest(&data);
-            let actual = format!("{:x}", digest);
-            if actual != expected {
-                panic!(
-                    "SHA256 mismatch for {}: expected {} got {}",
-                    tarball.display(),
-                    expected,
-                    actual
-                );
-            } else {
-                println!("cargo:warning=SHA256 verified for {}", tarball.display());
-            }
-        }
-        // extract
-        extract_tarball(&tarball, &src_dir);
-        // Build with meson
-        {
-            // try to ensure meson/ninja are available before building each core dep (in case user forced clean env)
-            match ensure_meson_and_ninja() {
-                Ok(_) => {}
-                Err(e) => panic!("Tool bootstrap failed: {}", e),
-            }
-        }
-        meson_build_and_install(&src_dir, &install_dir, meson_args);
-        // update pkg-config path for subsequent packages
-        let pkgconfig_path = install_dir.join("lib").join("pkgconfig");
-        if pkgconfig_path.exists() {
-            let prev = env::var("PKG_CONFIG_PATH").unwrap_or_default();
-            let new = if prev.is_empty() {
-                format!("{}", pkgconfig_path.display())
-            } else {
-                format!("{}:{}", pkgconfig_path.display(), prev)
-            };
-            env::set_var("PKG_CONFIG_PATH", &new);
-        }
-    }
-
-    // After successful build, export search paths (including arch-specific subdirs)
-    let mut lib_search_paths = vec![install_dir.join("lib")];
-    if let Ok(lib_entries) = fs::read_dir(install_dir.join("lib")) {
-        for entry in lib_entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                lib_search_paths.push(path);
-            }
-        }
-    }
-    for lib_path in lib_search_paths {
-        println!(
-            "cargo:rustc-link-search=native={}",
-            lib_path.display()
-        );
-    }
-    true
+/// Vendoring removed on `main`. To experiment with vendoring, see the `vendored` branch.
+/// This stub returns `false` so callers fall back to system libraries or dependency bundles.
+fn vendor_core_deps(_out_dir: &Path) -> bool {
+    println!("cargo:warning=Vendoring support removed from main branch. Use dependency bundles (scripts/create_bundle_macos.sh) or the 'vendored' branch for full vendored builds.");
+    false
 }
 
 /// Vendor and build Pango + GLib dependencies (libffi, fribidi, glib, pango)
@@ -563,121 +455,14 @@ fn ensure_meson_and_ninja() -> Result<(), String> {
     }
 }
 
-fn vendor_pango_deps(out_dir: &Path) -> bool {
-    let vendored = out_dir.join("vendored");
-    let install_dir = vendored.join("pango-install");
-    let _ = std::fs::create_dir_all(&vendored);
-
-    // Try to make sure meson/ninja are available before starting the longer builds
-    match ensure_meson_and_ninja() {
-        Ok(_) => (),
-        Err(e) => {
-            println!("cargo:warning=Could not auto-bootstrap meson/ninja: {}", e);
-            println!("cargo:warning=Please install meson/ninja (pip/pipx or brew) and re-run, or set MICROTEX_VENDORED_PANGO=0 to skip vendoring pango.");
-            return false;
-        }
-    }
-
-    let pkgs: &[(&str, &str, &str, &[&str])] = &[
-        (
-            "libffi",
-            "libffi-3.4.3.tar.gz",
-            "https://sourceware.org/pub/libffi/libffi-3.4.3.tar.gz",
-            &["-Ddefault_library=static"],
-        ),
-        (
-            "fribidi",
-            "fribidi-1.0.10.tar.xz",
-            "https://github.com/fribidi/fribidi/releases/download/v1.0.10/fribidi-1.0.10.tar.xz",
-            &["-Ddefault_library=static"],
-        ),
-        // Please note: some GLib/Pango releases require additional meson options on macOS; we use conservative defaults.
-        (
-            "glib",
-            "glib-2.76.0.tar.xz",
-            "https://download.gnome.org/sources/glib/2.76/glib-2.76.0.tar.xz",
-            &["-Ddefault_library=static", "-Dman=false", "-Ddocs=false"],
-        ),
-        (
-            "pango",
-            "pango-1.52.0.tar.xz",
-            "https://download.gnome.org/sources/pango/1.52/pango-1.52.0.tar.xz",
-            &[
-                "-Ddefault_library=static",
-                "-Dintrospection=false",
-                "-Ddocs=false",
-                "-Dcairo=enabled",
-            ],
-        ),
-    ];
-
-    for (name, tar_name, url, meson_args) in pkgs.iter() {
-        let tarball = vendored.join(tar_name);
-        let src_dir = vendored.join(format!("{}-src", name));
-        // download
-        download_to(url, &tarball);
-        // extract
-        extract_tarball(&tarball, &src_dir);
-        // ensure meson/ninja available
-        match ensure_meson_and_ninja() {
-            Ok(_) => {}
-            Err(e) => panic!("Tool bootstrap failed: {}", e),
-        }
-        // build
-        meson_build_and_install(&src_dir, &install_dir, meson_args);
-        // update pkg-config path for subsequent packages
-        // Note: On Linux, Meson may install into lib/<arch>/ subdirectories
-        let mut pkgconfig_path = install_dir.join("lib").join("pkgconfig");
-        if !pkgconfig_path.exists() {
-            if let Ok(lib_entries) = fs::read_dir(install_dir.join("lib")) {
-                for entry in lib_entries.flatten() {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        let candidate_pkgconfig = path.join("pkgconfig");
-                        if candidate_pkgconfig.exists() {
-                            pkgconfig_path = candidate_pkgconfig;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        if pkgconfig_path.exists() {
-            let prev = env::var("PKG_CONFIG_PATH").unwrap_or_default();
-            let new = if prev.is_empty() {
-                format!("{}", pkgconfig_path.display())
-            } else {
-                format!("{}:{}", pkgconfig_path.display(), prev)
-            };
-            env::set_var("PKG_CONFIG_PATH", &new);
-        }
-    }
-
-    // Recursively find and add all lib directories (including arch-specific ones)
-    let mut lib_search_paths = vec![install_dir.join("lib")];
-    if let Ok(lib_entries) = fs::read_dir(install_dir.join("lib")) {
-        for entry in lib_entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                lib_search_paths.push(path);
-            }
-        }
-    }
-    for lib_path in lib_search_paths {
-        println!(
-            "cargo:rustc-link-search=native={}",
-            lib_path.display()
-        );
-    }
-    true
+fn vendor_pango_deps(_out_dir: &Path) -> bool {
+    println!("cargo:warning=Vendoring of Pango/GLib removed from main branch. Use dependency bundles or system packages via Homebrew.");
+    false
 }
 
 fn main() {
-    // make sure builds rerun when user changes these env vars
-    println!("cargo:rerun-if-env-changed=MICROTEX_VENDORED_CAIRO");
-    println!("cargo:rerun-if-env-changed=MICROTEX_USE_SYSTEM_CAIRO");
-    println!("cargo:rerun-if-env-changed=MICROTEX_CAIRO_SHA256");
-    println!("cargo:rerun-if-env-changed=MICROTEX_VENDORED_CAIRO_FORCE_REBUILD");
+    // make sure builds rerun when user changes bundle env var
+    println!("cargo:rerun-if-env-changed=MICROTEX_BUNDLE_DIR");
 
     // Optionally build a vendored Cairo and add its pkgconfig path so the CMake
     // step finds it. Enable with feature `vendored-cairo` or env var
@@ -685,154 +470,29 @@ fn main() {
     // system libraries and skip vendoring.
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let prefer_system = env::var("MICROTEX_USE_SYSTEM_CAIRO").is_ok();
-    let vendored_feature = env::var("CARGO_FEATURE_VENDORED_CAIRO").is_ok();
-    let vendored_env = env::var("MICROTEX_VENDORED_CAIRO").is_ok();
-    if (vendored_feature || vendored_env) && !prefer_system {
-        // Build Cairo (minimal/portable) and install into OUT_DIR/vendored/cairo-install
-        const CAIRO_VERSION: &str = "1.18.4";
-        let tar_name = format!("cairo-{}.tar.xz", CAIRO_VERSION);
-        let tar_url = format!("https://www.cairographics.org/releases/{}", tar_name);
+    let target = env::var("TARGET").unwrap_or_default();
 
-        let vendored_root = out_dir.join("vendored");
-        let src_dir = vendored_root.join("cairo-src");
-        let tarball = vendored_root.join(&tar_name);
-        let install_dir = vendored_root.join("cairo-install");
+    // Vendoring of Cairo removed from main branch. Use system libraries or dependency bundles
+    // (see `scripts/create_bundle_macos.sh` and BUILDING.md for instructions).
 
-        // optionally force rebuild
-        if env::var("MICROTEX_VENDORED_CAIRO_FORCE_REBUILD").is_ok() {
-            let _ = std::fs::remove_dir_all(&vendored_root);
+    // Detect dependency bundle and configure PKG_CONFIG_PATH / link search if present
+    let bundle_dir = env::var("MICROTEX_BUNDLE_DIR").map(|s| PathBuf::from(s)).unwrap_or_else(|_| {
+        let mut p = PathBuf::from("dependencies_bundle");
+        if target.contains("apple") && target.contains("x86_64") {
+            p = p.join("macos").join("intel");
+        } else if target.contains("apple") && target.contains("aarch64") {
+            p = p.join("macos").join("arm64");
+        } else if target.contains("linux") && target.contains("x86_64") {
+            p = p.join("ubuntu").join("amd64");
+        } else if target.contains("linux") && target.contains("aarch64") {
+            p = p.join("ubuntu").join("arm64");
         }
+        p
+    });
 
-        if !install_dir.exists() {
-            let _ = std::fs::create_dir_all(&vendored_root);
-
-            // download tarball if not present
-            if !tarball.exists() {
-                eprintln!("Downloading {} to {}", tar_url, tarball.display());
-                // try curl then wget
-                let downloaded = if std::process::Command::new("curl")
-                    .arg("-L")
-                    .arg("-o")
-                    .arg(&tarball)
-                    .arg(&tar_url)
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false)
-                {
-                    true
-                } else {
-                    std::process::Command::new("wget")
-                        .arg(&tar_url)
-                        .arg("-O")
-                        .arg(&tarball)
-                        .status()
-                        .map(|s| s.success())
-                        .unwrap_or(false)
-                };
-                if !downloaded {
-                    panic!("failed to download {}. Please install curl or wget, or set MICROTEX_USE_SYSTEM_CAIRO=1 to use system Cairo.", tar_url);
-                }
-
-                // optional SHA256 verification if user provided expected checksum
-                if let Ok(expected) = env::var("MICROTEX_CAIRO_SHA256") {
-                    use sha2::{Digest, Sha256};
-                    let data = std::fs::read(&tarball).expect("read downloaded tarball");
-                    let digest = Sha256::digest(&data);
-                    let actual = format!("{:x}", digest);
-                    if actual != expected {
-                        panic!(
-                            "SHA256 mismatch for {}: expected {} got {}",
-                            tarball.display(),
-                            expected,
-                            actual
-                        );
-                    } else {
-                        println!("cargo:warning=SHA256 verified for {}", tarball.display());
-                    }
-                } else {
-                    println!("cargo:warning=No MICROTEX_CAIRO_SHA256 set, download will not be checksum-verified");
-                }
-            } // end if !tarball.exists()
-
-            // extract if needed
-            if !src_dir.exists() {
-                extract_tarball(&tarball, &src_dir);
-            }
-
-            // configure and build with meson/ninja
-            let build_dir = src_dir.join("build");
-            let _ = std::fs::create_dir_all(&build_dir);
-            // Ensure build tools are present; if missing try to bootstrap them (pip/pipx into user-path)
-            ensure_meson_and_ninja()
-                .unwrap_or_else(|e| panic!("meson/ninja bootstrap failed: {}", e));
-
-            eprintln!(
-                "Configuring Cairo with meson (prefix={})",
-                install_dir.display()
-            );
-
-            // Build meson args list and delegate to meson_build_and_install which is
-            // resilient to unsupported -D options.
-            let target = env::var("TARGET").unwrap_or_default();
-            let is_musl = target.contains("musl");
-
-            let mut cairo_args: Vec<&str> = vec![
-                "-Ddefault_library=static",
-                "-Dtests=disabled",
-                "-Dfontconfig=enabled",
-                "-Dpng=enabled",
-                "-Dfreetype=enabled",
-                // disable lzo to avoid header not found issues on some systems
-                "-Dlzo=disabled",
-                // try to disable the script interpreter if supported by this Cairo release
-                "-Dscript-interpreter=false",
-            ];
-
-            if target.contains("apple") {
-                // macOS: use Quartz backend, disable X11
-                cairo_args.push("-Dquartz=enabled");
-                cairo_args.push("-Dxlib=disabled");
-                cairo_args.push("-Dxcb=disabled");
-            } else {
-                // Linux/other: disable Quartz (doesn't exist), disable X11/XCB for minimal static build
-                cairo_args.push("-Dquartz=disabled");
-                cairo_args.push("-Dxlib=disabled");
-                cairo_args.push("-Dxcb=disabled");
-
-                // musl-specific: disable features that might not work well
-                if is_musl {
-                    eprintln!("Configuring Cairo for musl libc (Alpine Linux)");
-                    cairo_args.push("-Dspectre=disabled");
-                }
-            }
-
-            // Delegate to the robust meson builder which will prune unknown options
-            meson_build_and_install(&src_dir, &install_dir, &cairo_args);
-
-        }
-
-        // If installed, add its pkgconfig path to PKG_CONFIG_PATH so CMake finds it
-        // Note: On Linux, Meson may install into lib/<arch>/ subdirectories
-        let mut pkgconfig_path = install_dir.join("lib").join("pkgconfig");
-        let mut lib_dir = install_dir.join("lib");
-
-        // If pkgconfig not found in lib/, search in lib/<arch>/ subdirectories
-        if !pkgconfig_path.exists() {
-            if let Ok(lib_entries) = fs::read_dir(&lib_dir) {
-                for entry in lib_entries.flatten() {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        let candidate_pkgconfig = path.join("pkgconfig");
-                        if candidate_pkgconfig.exists() {
-                            pkgconfig_path = candidate_pkgconfig;
-                            lib_dir = path;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
+    let mut using_bundle = false;
+    if bundle_dir.exists() {
+        let pkgconfig_path = bundle_dir.join("lib").join("pkgconfig");
         if pkgconfig_path.exists() {
             let prev = env::var("PKG_CONFIG_PATH").unwrap_or_default();
             let new = if prev.is_empty() {
@@ -840,35 +500,18 @@ fn main() {
             } else {
                 format!("{}:{}", pkgconfig_path.display(), prev)
             };
-            env::set_var("PKG_CONFIG_PATH", &new);
-            println!(
-                "cargo:warning=Added vendored cairo pkgconfig path: {}",
-                pkgconfig_path.display()
-            );
-            // Add both the lib directory and the parent lib directory for compatibility
-            println!(
-                "cargo:rustc-link-search=native={}",
-                lib_dir.display()
-            );
-            println!(
-                "cargo:rustc-link-search=native={}",
-                install_dir.join("lib").display()
-            );
-        } else {
-            println!("cargo:warning=vendored cairo install directory missing pkgconfig at {}, continuing and hoping system pkg-config will locate libraries", install_dir.join("lib").display());
+            env::set_var("PKG_CONFIG_PATH", new);
+            println!("cargo:warning=Using dependency bundle at {}", bundle_dir.display());
         }
-        
-        // Also add the deps-install lib directory (for pixman, freetype, harfbuzz, fontconfig)
-        // These are built alongside cairo in vendor_core_deps()
-        let deps_install = out_dir.join("vendored").join("deps-install").join("lib");
-        if deps_install.exists() {
-            println!(
-                "cargo:rustc-link-search=native={}",
-                deps_install.display()
-            );
-            println!("cargo:warning=Added vendored deps lib search path: {}", deps_install.display());
+        let lib_dir = bundle_dir.join("lib");
+        if lib_dir.exists() {
+            println!("cargo:rustc-link-search=native={}", lib_dir.display());
         }
+        using_bundle = true;
     }
+
+
+
 
     // Ensure pkg-config is present (CMake uses it to find system libraries)
     if std::process::Command::new("pkg-config")
@@ -887,60 +530,28 @@ fn main() {
     let vendored_pango_feature = env::var("CARGO_FEATURE_VENDORED_PANGO").is_ok();
     let vendored_pango_env = env::var("MICROTEX_VENDORED_PANGO").is_ok();
 
-    if !using_vendored || vendored_pango_feature || vendored_pango_env {
-        // collect missing packages
-        let required = ["cairo", "pango", "pangocairo", "fontconfig"];
-        let mut missing = Vec::new();
-        for pkg in required.iter() {
-            let ok = std::process::Command::new("pkg-config")
-                .arg("--exists")
-                .arg(pkg)
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false);
-            if !ok {
-                missing.push(*pkg);
-            }
+    // Verify required packages (either provided by system pkg-config or by dependency bundle).
+    let required = ["cairo", "pango", "pangocairo", "fontconfig"];
+    let mut missing = Vec::new();
+    for pkg in required.iter() {
+        let ok = std::process::Command::new("pkg-config")
+            .arg("--exists")
+            .arg(pkg)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !ok {
+            missing.push(*pkg);
         }
+    }
 
-        if !missing.is_empty() {
-            if prefer_system && !(vendored_pango_feature || vendored_pango_env) {
-                panic!("Missing system packages: {:?}. Set MICROTEX_USE_SYSTEM_CAIRO=0 or install them with Homebrew: brew install cairo pango fontconfig", missing);
-            }
-
-            println!("cargo:warning=Missing packages {:?}, attempting vendored build of core deps (pixman, freetype, harfbuzz, fontconfig, cairo)", missing);
-            let auto_ok = vendor_core_deps(&out_dir);
-            if auto_ok {
-                using_vendored = true;
-            }
-
-            // If pango is missing specifically, attempt vendoring Pango & GLib when requested/needed
-            if missing.contains(&"pango") || vendored_pango_feature || vendored_pango_env {
-                println!(
-                    "cargo:warning=Attempting vendored build of Pango and GLib (may take a while)"
-                );
-                let ok = vendor_pango_deps(&out_dir);
-                if ok {
-                    using_vendored = true;
-                }
-            }
-
-            // recheck
-            let mut still_missing = Vec::new();
-            for pkg in required.iter() {
-                let ok = std::process::Command::new("pkg-config")
-                    .arg("--exists")
-                    .arg(pkg)
-                    .status()
-                    .map(|s| s.success())
-                    .unwrap_or(false);
-                if !ok {
-                    still_missing.push(*pkg);
-                }
-            }
-            if !still_missing.is_empty() {
-                panic!("After attempting vendored build, the following packages are still missing: {:?}. Please install them or enable more vendored components.", still_missing);
-            }
+    if !missing.is_empty() {
+        if using_bundle {
+            println!("cargo:warning=Dependency bundle present but missing packages: {:?}. Ensure bundle has .pc files under lib/pkgconfig.", missing);
+        } else if prefer_system {
+            panic!("Missing system packages: {:?}. Install with Homebrew: brew install cairo pango fontconfig pkg-config lzo", missing);
+        } else {
+            panic!("Missing packages: {:?}. Install via Homebrew or create a dependency bundle and set MICROTEX_BUNDLE_DIR.", missing);
         }
     }
 
@@ -1049,20 +660,24 @@ fn main() {
     }
 
     // Link system graphics libraries required when CAIRO is enabled.
-    // If we built vendored static cairo above (including auto-built), prefer to link the static copy.
-    if using_vendored {
-        // When using vendored Cairo, link in dependency order (reverse topological):
-        // cairo -> freetype, pixman, fontconfig -> harfbuzz, png, z, etc.
+    // If we use a dependency bundle, prefer linking the bundled static copies.
+    if using_bundle {
+        // When using a dependency bundle, we assume it contains the static libs in the right order
+        println!("cargo:rustc-link-lib=static=pcre2-8");
+        println!("cargo:rustc-link-lib=static=glib-2.0");
+        println!("cargo:rustc-link-lib=static=gobject-2.0");
+        println!("cargo:rustc-link-lib=static=pango-1.0");
+        println!("cargo:rustc-link-lib=static=pangocairo-1.0");
         println!("cargo:rustc-link-lib=static=cairo");
         println!("cargo:rustc-link-lib=static=pixman-1");
         println!("cargo:rustc-link-lib=static=freetype");
         println!("cargo:rustc-link-lib=static=harfbuzz");
-        println!("cargo:rustc-link-lib=static=fontconfig");
         println!("cargo:rustc-link-lib=static=png");
     } else {
         println!("cargo:rustc-link-lib=cairo");
         println!("cargo:rustc-link-lib=pango-1.0");
         println!("cargo:rustc-link-lib=pangocairo-1.0");
+        println!("cargo:rustc-link-lib=fontconfig");
         println!("cargo:rustc-link-lib=fontconfig");
     }
 
@@ -1129,7 +744,7 @@ fn main() {
                                 break;
                             }
                         }
-                        if using_vendored && has_static {
+                        if using_bundle && has_static {
                             println!("cargo:rustc-link-lib=static={}", lib);
                         } else {
                             println!("cargo:rustc-link-lib={}", lib);

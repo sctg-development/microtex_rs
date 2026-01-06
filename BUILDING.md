@@ -58,24 +58,18 @@ sudo apt-get install libcairo2-dev libpango-1.0-0 libpango1.0-dev libfontconfig1
 cargo build
 ```
 
-### 2. Vendored Build (Static Dependencies)
+### 2. Dependency Bundles (preferred)
 
-Build and statically link all graphics dependencies:
+Instead of vendoring and building all dependencies from source in the `main` branch, we support dependency bundles. For macOS Intel (local developer machine):
 
 ```bash
-cargo build --features vendored-cairo
+brew install cairo pango fontconfig pkg-config lzo
+scripts/create_bundle_macos.sh
 ```
 
-This automatically downloads and compiles:
-- Cairo 1.18.4
-- Pixman
-- FreeType
-- HarfBuzz
-- FontConfig
-- Pango (optional, with `vendored-pango` feature)
+This will create `dependencies_bundle/macos/intel` containing `lib/`, `include/`, and `lib/pkgconfig/` so the build can find libraries and pkg-config files. Set `MICROTEX_BUNDLE_DIR` to point to the bundle directory if you keep it outside the repo.
 
-**Note**: First-time vendored builds take 5-10 minutes. Subsequent builds are faster due to caching.
-
+If you want a fully vendored build from source, check out the `vendored` branch which contains the previous vendoring flow.
 ### 3. Release Build
 
 For production use:

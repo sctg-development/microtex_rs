@@ -1,0 +1,10 @@
+prefix=/usr/local/Cellar/cairo/1.18.4
+includedir=${prefix}/include
+libdir=${prefix}/lib
+
+Name: cairo-quartz-image
+Description: Quartz Image surface backend for cairo graphics library
+Version: 1.18.4
+Requires: cairo
+Libs: -framework CoreFoundation -framework ApplicationServices
+Cflags: -I${includedir}
