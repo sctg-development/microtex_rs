@@ -2,7 +2,7 @@ name: Docs - build and publish rustdoc
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -32,7 +32,10 @@ jobs:
           override: true
 
       - name: Build documentation (rustdoc)
-        run: cargo doc --workspace --no-deps --all-features --release
+        shell: bash
+        run: |
+          export RUSTDOCFLAGS="--html-in-header ./doc_helper/mermaid-header.html --html-in-header ./doc_helper/github-corner.html"
+          cargo doc --workspace --no-deps --all-features --release
 
       - name: Upload docs artifact
         uses: actions/upload-artifact@v6
