@@ -25,12 +25,12 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          arch -x86_64 /usr/local/bin/brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2
+          arch -x86_64 brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2
       - name: Verify pango installation
         shell: bash
         run: |
-          arch -x86_64 /usr/local/bin/brew list pango
-          arch -x86_64 /usr/local/bin/pkg-config --list-all | grep pango
+          arch -x86_64 brew list pango
+          arch -x86_64 pkg-config --list-all | grep pango
       # install meson and nija with --break-system-packages
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
@@ -68,12 +68,12 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          /usr/local/bin/brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2
+          brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2
       - name: Verify pango installation
         shell: bash
         run: |
-          /usr/local/bin/brew list pango
-          /usr/local/bin/pkg-config --list-all | grep pango
+          brew list pango
+          pkg-config --list-all | grep pango
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
