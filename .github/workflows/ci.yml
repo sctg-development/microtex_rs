@@ -60,6 +60,28 @@ jobs:
             exit 1
           fi
 
+      - name: Collect bundle diagnostics (if failure)
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bundle-diagnostics
+          cp -a dependencies_bundle/macos/intel/lib/pkgconfig bundle-diagnostics/pkgconfig || true
+          PKGDIR=dependencies_bundle/macos/intel/lib/pkgconfig
+          for pkg in pango pangocairo cairo fontconfig libpng zlib bzip2 libffi freetype2 harfbuzz pixman-1 libpcre2-8; do
+            echo "----- $pkg -----" > bundle-diagnostics/$pkg.log
+            PKG_CONFIG_PATH=$PKGDIR pkg-config --print-errors --libs --cflags "$pkg" >> bundle-diagnostics/$pkg.log 2>&1 || true
+          done
+          tar -czf bundle-diagnostics.tar.gz bundle-diagnostics || true
+
+      - name: Upload bundle diagnostics artifact (if failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-diagnostics-${{ github.run_id }}
+          path: bundle-diagnostics.tar.gz
+          retention-days: 7
+
 
   validate-bundle-macos:
     name: Validate macOS Intel bundle
@@ -90,6 +112,28 @@ jobs:
             echo "Bundle validation failed: missing packages"
             exit 1
           fi
+
+      - name: Collect bundle diagnostics (if failure)
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bundle-diagnostics
+          cp -a dependencies_bundle/macos/intel/lib/pkgconfig bundle-diagnostics/pkgconfig || true
+          PKGDIR=dependencies_bundle/macos/intel/lib/pkgconfig
+          for pkg in pango pangocairo cairo fontconfig libpng zlib bzip2 libffi freetype2 harfbuzz pixman-1 libpcre2-8; do
+            echo "----- $pkg -----" > bundle-diagnostics/$pkg.log
+            PKG_CONFIG_PATH=$PKGDIR pkg-config --print-errors --libs --cflags "$pkg" >> bundle-diagnostics/$pkg.log 2>&1 || true
+          done
+          tar -czf bundle-diagnostics.tar.gz bundle-diagnostics || true
+
+      - name: Upload bundle diagnostics artifact (if failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-diagnostics-${{ github.run_id }}
+          path: bundle-diagnostics.tar.gz
+          retention-days: 7
 
   build-macos-arm64:
     name: Build macOS (arm64)

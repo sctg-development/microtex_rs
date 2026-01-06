@@ -14,7 +14,8 @@ BUNDLE_ABS=$(cd "$DEST" && pwd)
 
 # Packages we want to capture from Homebrew pkg-config
 # Include transitive dependencies required by Pango (glib/gobject/gio/fribidi, etc.)
-PACKAGES=(cairo pango fontconfig freetype2 harfbuzz harfbuzz-gobject pixman-1 libpcre2-8 libpng lzo2 glib-2.0 gobject-2.0 gio-2.0 fribidi libffi zlib bzip2 expat graphite2)
+# Also include low-level system/proto packages that Pango/Cairo/fontconfig often refer to
+PACKAGES=(cairo pango fontconfig freetype2 harfbuzz harfbuzz-gobject pixman-1 libpcre2-8 libpng lzo2 glib-2.0 gobject-2.0 gio-2.0 fribidi libffi zlib bzip2 expat graphite2 x11 xproto kbproto xextproto renderproto)
 
 # Helper: copy files preserving structure
 copy_libs() {
@@ -46,10 +47,15 @@ copy_libs() {
 }
 
 copy_includes() {
-  local incdir="$1"
+  local pkg="$1"
+  local incdir="$2"
   if [ -d "$incdir" ]; then
-    echo "Copying headers from $incdir"
-    rsync -a --exclude='*.la' "$incdir/" "$DEST/include/" || true
+    echo "Copying headers from $incdir for package $pkg"
+    dest="$DEST/include/$pkg"
+    # Remove any previous content to avoid rsync unlinkat errors and ensure a clean copy
+    rm -rf "$dest" 2>/dev/null || true
+    mkdir -p "$dest"
+    rsync -a --exclude='*.la' "$incdir/" "$dest/" || true
   fi
 }
 
@@ -75,7 +81,7 @@ for pkg in "${PACKAGES[@]}"; do
   fi
 
   copy_libs "$libdir"
-  copy_includes "$incdir"
+  copy_includes "$pkg" "$incdir"
 
   # If pkgconfig directory didn't contain .pc for this package, try common Homebrew/Cellar paths
   if [ ! -f "$DEST/lib/pkgconfig/${pkg}.pc" ] && [ ! -f "$DEST/lib/pkgconfig/${pkg}-1.0.pc" ] && [ ! -f "$DEST/lib/pkgconfig/${pkg}*.pc" ]; then
@@ -114,6 +120,16 @@ if [ -d "$DEST/lib/pkgconfig" ]; then
       s|^includedir=.*|includedir=${prefix}/include|
       s|^libdir=.*|libdir=${prefix}/lib|
     ' "$pc" > "$tmp" && mv -f "$tmp" "$pc" && chmod 644 "$pc" 2>/dev/null || true
+  done
+fi
+
+# Diagnostic: print pkg-config requires for key packages (helps find missing transitive deps)
+if [ -d "$DEST/lib/pkgconfig" ]; then
+  echo 'Diagnostic: printing pkg-config "requires" for key packages'
+  PKGDIR="$DEST/lib/pkgconfig"
+  for pkg in pango pangocairo cairo fontconfig libpng freetype2; do
+    echo "--- requires for $pkg ---"
+    PKG_CONFIG_PATH="$PKGDIR" pkg-config --print-requires --print-requires-private "$pkg" || echo "pkg-config could not print requires for $pkg (package may be missing)"
   done
 fi
 
