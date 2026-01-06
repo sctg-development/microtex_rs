@@ -33,7 +33,15 @@ option(BUILD_EXAMPLE_QTPNG "Build Qt png example, only work with -DQT=ON flag" O
 option(GDI "Build with GDI" OFF)
 option(BUILD_EXAMPLE_WIN32 "Build Win32 GDI example, only work with -DGDI=ON flag" OFF)
 option(BUILD_EXAMPLE_MEMCHECK "Build memory check example" OFF)
-option(HAVE_LOG "If enable log" ON)
+# HAVE_LOG defaults to ON only for Debug builds. Can be overridden with -DHAVE_LOG.
+if(NOT DEFINED HAVE_LOG)
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(HAVE_LOG ON CACHE BOOL "If enable log")
+  else()
+    set(HAVE_LOG OFF CACHE BOOL "If enable log")
+  endif()
+endif()
+
 if (HAVE_LOG)
     add_definitions(-DHAVE_LOG)
 endif ()
