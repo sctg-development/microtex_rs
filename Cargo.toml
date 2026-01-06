@@ -22,6 +22,8 @@ env_logger = "0.11"
 cmake = "0.1"
 bindgen = "0.72.1"
 sha2 = "0.10"
+walkdir = "2"
+num_cpus = "1"
 
 [features]
 # Vendoring removed from main branch. Use system libraries or dependency bundles.

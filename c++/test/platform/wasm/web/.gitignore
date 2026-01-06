@@ -1,0 +1,5 @@
+node_modules/
+gen/
+dist/
+example-dist/
+npm-debug.log

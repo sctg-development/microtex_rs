@@ -7,14 +7,10 @@
 #include "wrapper/graphic_wrapper.h"
 
 #ifdef HAVE_CAIRO
-#include <cairo-svg.h>
+#include "../platform/cairo/graphic_cairo.h"
 #include <cairo.h>
-
-#include <cstdlib>
+#include <cairo-svg.h>
 #include <cstring>
-#include <vector>
-
-#include "graphic_cairo.h"
 #endif
 
 using namespace microtex;
@@ -68,16 +64,9 @@ MICROTEX_CAPI float microtex_fontSize(FontDesc* desc) {
 }
 
 MICROTEX_CAPI FontMetaPtr microtex_init(unsigned long len, const unsigned char* data) {
-  // Always register the wrapper factory (used by the drawing-command API)
-  PlatformFactory::registerFactory("__wrapper__", std::make_unique<PlatformFactory_wrapper>());
-#ifdef HAVE_CAIRO
-  // If Cairo is available, also register and activate the Cairo platform so
-  // fonts are created as `Font_cairo` (needed for native Cairo rendering).
-  PlatformFactory::registerFactory("cairo", std::make_unique<PlatformFactory_cairo>());
-  PlatformFactory::activate("cairo");
-#else
+  auto factory = std::make_unique<PlatformFactory_wrapper>();
+  PlatformFactory::registerFactory("__wrapper__", std::move(factory));
   PlatformFactory::activate("__wrapper__");
-#endif
   FontSrcData src{len, data};
   auto meta = MicroTeX::init(src);
   return new FontMeta(meta);
@@ -272,13 +261,22 @@ MICROTEX_CAPI unsigned char* microtex_render_to_svg(RenderPtr render, unsigned l
   return out;
 }
 
+#else
+
+// Stub implementation when HAVE_CAIRO is not defined
+MICROTEX_CAPI unsigned char* microtex_render_to_svg(RenderPtr render, unsigned long* out_len) {
+  fprintf(stderr, "microtex_render_to_svg: Cairo support not compiled\n");
+  if (out_len) *out_len = 0;
+  return nullptr;
+}
+
+#endif
+
 MICROTEX_CAPI void microtex_free_buffer(unsigned char* buf) {
   free(buf);
 }
-#endif
 
 #ifdef __cplusplus
 }
 #endif
-
 #endif  // HAVE_CWRAPPER

@@ -1,0 +1,31 @@
+; Taken from https://github.com/videolan/dav1d/blob/master/package/crossfiles/wasm64.meson
+[binaries]
+c = 'emcc'
+cpp = 'em++'
+ar = 'emar'
+strip = 'emstrip'
+exe_wrapper = 'node'
+
+[built-in options]
+default_library = 'static'
+cpp_args = '-fexceptions -sNO_DISABLE_EXCEPTION_CATCHING'
+cpp_link_args = '-fexceptions -sNO_DISABLE_EXCEPTION_CATCHING'
+
+[project options]
+CAIRO = false
+EXAMPLE_GTKMM = false
+
+GTK = false
+EXAMPLE_GTK = false
+
+QT = false
+EXAMPLE_QT = false
+
+GDI = 'disabled'
+EXAMPLE_WIN32 = false
+
+[host_machine]
+system = 'emscripten'
+cpu_family = 'wasm64'
+cpu = 'wasm64'
+endian = 'little'

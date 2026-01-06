@@ -119,6 +119,25 @@ if (DEFINED HAVE_CWRAPPER AND HAVE_CWRAPPER)
     target_compile_definitions(microtex PUBLIC -DHAVE_CWRAPPER)
 endif ()
 
+# Define HAVE_CAIRO for cwrapper.cpp if Cairo support is enabled
+if (DEFINED CAIRO AND CAIRO)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(Cairo REQUIRED IMPORTED_TARGET cairo)
+    pkg_check_modules(Pango REQUIRED IMPORTED_TARGET pango)
+    pkg_check_modules(Pangocairo REQUIRED IMPORTED_TARGET pangocairo)
+    target_compile_definitions(microtex PRIVATE -DHAVE_CAIRO)
+    target_link_libraries(microtex PRIVATE 
+        ${Cairo_LIBRARIES}
+        ${Pango_LIBRARIES}
+        ${Pangocairo_LIBRARIES}
+    )
+    target_include_directories(microtex PRIVATE 
+        ${Cairo_INCLUDE_DIRS}
+        ${Pango_INCLUDE_DIRS}
+        ${Pangocairo_INCLUDE_DIRS}
+    )
+endif ()
+
 # source files
 target_sources(microtex PRIVATE ${_SRCS})
 target_include_directories(

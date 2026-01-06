@@ -309,7 +309,6 @@ MICROTEX_CAPI void microtex_free_buffer(unsigned char* buf);
 #ifdef __cplusplus
 }
 #endif
-
 #endif  // HAVE_CWRAPPER
 
 #endif  // MICROTEX_CWRAPPER_H
