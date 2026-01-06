@@ -514,15 +514,7 @@ fn main() {
             }
             println!("cargo:warning=Using dependency bundle at {}", bundle_dir.display());
         }
-        let lib_dir = bundle_dir.join("lib");
-        if lib_dir.exists() {
-            println!("cargo:rustc-link-search=native={}", lib_dir.display());
-        }
-        using_bundle = true;
     }
-
-
-
 
     // Ensure pkg-config is present (CMake uses it to find system libraries)
     if std::process::Command::new("pkg-config")
@@ -675,26 +667,16 @@ fn main() {
     }
 
     // Link system graphics libraries required when CAIRO is enabled.
-    // If we use a dependency bundle, prefer linking the bundled static copies.
-    if using_bundle {
-        // When using a dependency bundle, we assume it contains the static libs in the right order
-        println!("cargo:rustc-link-lib=static=pcre2-8");
-        println!("cargo:rustc-link-lib=static=glib-2.0");
-        println!("cargo:rustc-link-lib=static=gobject-2.0");
-        println!("cargo:rustc-link-lib=static=pango-1.0");
-        println!("cargo:rustc-link-lib=static=pangocairo-1.0");
+    // If we built vendored static cairo above (including auto-built), prefer to link the static copy.
+    if using_vendored {
+        // prefer static cairo provided by vendored build
         println!("cargo:rustc-link-lib=static=cairo");
-        println!("cargo:rustc-link-lib=static=pixman-1");
-        println!("cargo:rustc-link-lib=static=freetype");
-        println!("cargo:rustc-link-lib=static=harfbuzz");
-        println!("cargo:rustc-link-lib=static=png");
     } else {
         println!("cargo:rustc-link-lib=cairo");
-        println!("cargo:rustc-link-lib=pango-1.0");
-        println!("cargo:rustc-link-lib=pangocairo-1.0");
-        println!("cargo:rustc-link-lib=fontconfig");
-        println!("cargo:rustc-link-lib=fontconfig");
     }
+    println!("cargo:rustc-link-lib=pango-1.0");
+    println!("cargo:rustc-link-lib=pangocairo-1.0");
+    println!("cargo:rustc-link-lib=fontconfig");
 
     // Also query pkg-config for any additional link flags required by our graphics
     // toolchain packages (static case) and emit appropriate cargo:rustc-link-lib directives.
