@@ -1,6 +1,0 @@
-module FFI [system] {
-  umbrella "ffi"
-  module * { export * }
-  
-  link "ffi"
-}

@@ -1,1 +1,0 @@
-../../Cellar/libxau/1.0.12/include/X11/Xauth.h

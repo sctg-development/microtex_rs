@@ -1,1 +1,0 @@
-../../../Cellar/libxrender/0.9.12/include/X11/extensions/Xrender.h

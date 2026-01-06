@@ -1,1 +1,0 @@
-../Cellar/npth/1.8/include/npth.h

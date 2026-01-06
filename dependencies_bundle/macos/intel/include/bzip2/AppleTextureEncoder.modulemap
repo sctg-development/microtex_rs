@@ -1,5 +1,0 @@
-module AppleTextureEncoder [system] {
-  header "AppleTextureEncoder.h"
-  link "ate"
-  export *
-}

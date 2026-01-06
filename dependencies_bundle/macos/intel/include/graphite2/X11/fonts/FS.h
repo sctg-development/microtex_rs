@@ -1,1 +1,0 @@
-../../../Cellar/xorgproto/2025.1/include/X11/fonts/FS.h
