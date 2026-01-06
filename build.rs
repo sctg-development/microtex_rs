@@ -322,14 +322,27 @@ mod linker_config {
         // Link against the microtex-cairo library (contains Cairo rendering code)
         println!("cargo:rustc-link-lib=static=microtex-cairo");
 
-        // Always link C++ runtime on macOS
+        // Link C++ standard library
         #[cfg(target_os = "macos")]
         {
             println!("cargo:rustc-link-lib=dylib=c++");
         }
 
-        // Try to use pkg-config to find Cairo dependencies
-        // This is more reliable than hardcoding library names
+        #[cfg(target_os = "linux")]
+        {
+            println!("cargo:rustc-link-lib=dylib=stdc++");
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            println!("cargo:rustc-link-lib=dylib=msvcrt");
+        }
+
+        // Use pkg-config to find and link all Cairo and Pango dependencies
+        let mut cairo_libs = Vec::new();
+        let mut search_paths = Vec::new();
+
+        // Get Cairo flags from pkg-config
         if let Ok(output) = Command::new("pkg-config")
             .arg("--exists")
             .arg("cairo")
@@ -340,19 +353,52 @@ mod linker_config {
                 
                 if let Ok(libs_output) = Command::new("pkg-config")
                     .arg("--libs")
+                    .arg("--static")
                     .arg("cairo")
+                    .arg("pango")
+                    .arg("pangocairo")
                     .output()
                 {
                     let libs_str = String::from_utf8_lossy(&libs_output.stdout);
-                    println!("cargo:warning=Cairo linker flags: {}", libs_str.trim());
+                    println!("cargo:warning=Cairo/Pango linker flags: {}", libs_str.trim());
                     
                     for flag in libs_str.split_whitespace() {
                         if flag.starts_with("-l") {
                             let lib_name = &flag[2..];
-                            println!("cargo:rustc-link-lib={}", lib_name);
+                            if !cairo_libs.contains(&lib_name.to_string()) {
+                                cairo_libs.push(lib_name.to_string());
+                                println!("cargo:rustc-link-lib={}", lib_name);
+                            }
                         } else if flag.starts_with("-L") {
                             let lib_path = &flag[2..];
-                            println!("cargo:rustc-link-search=native={}", lib_path);
+                            if !search_paths.contains(&lib_path.to_string()) {
+                                search_paths.push(lib_path.to_string());
+                                println!("cargo:rustc-link-search=native={}", lib_path);
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback: try to get libs without --static flag
+                    if let Ok(libs_output) = Command::new("pkg-config")
+                        .arg("--libs")
+                        .arg("cairo")
+                        .output()
+                    {
+                        let libs_str = String::from_utf8_lossy(&libs_output.stdout);
+                        println!("cargo:warning=Cairo linker flags: {}", libs_str.trim());
+                        
+                        for flag in libs_str.split_whitespace() {
+                            if flag.starts_with("-l") {
+                                let lib_name = &flag[2..];
+                                if !cairo_libs.contains(&lib_name.to_string()) {
+                                    println!("cargo:rustc-link-lib={}", lib_name);
+                                }
+                            } else if flag.starts_with("-L") {
+                                let lib_path = &flag[2..];
+                                if !search_paths.contains(&lib_path.to_string()) {
+                                    println!("cargo:rustc-link-search=native={}", lib_path);
+                                }
+                            }
                         }
                     }
                 }
