@@ -59,13 +59,12 @@ jobs:
       - name: List downloaded files (debug)
         run: |
           ls -la rust-docs || true
-          ls -la rust-docs/doc || true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
           # the docs are under rust-docs/doc when downloaded
-          path: rust-docs/doc
+          path: rust-docs
 
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v1
