@@ -37,6 +37,59 @@ jobs:
       - name: Build (release for $TARGET)
         run: cargo build --workspace --all-features --release --target $TARGET
 
+      - name: Bundle diagnostic (if failure)
+        if: failure()
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKGDIR=dependencies_bundle/macos/intel/lib/pkgconfig
+          echo "Listing pkgconfig files in bundle:"
+          ls -la "$PKGDIR" || true
+          missing=0
+          pkgs="pango pangocairo cairo fontconfig libpng zlib bzip2 libffi freetype2 harfbuzz pixman-1 libpcre2-8"
+          for pkg in $pkgs; do
+            echo "Checking $pkg..."
+            PKG_CONFIG_PATH=$PKGDIR pkg-config --exists "$pkg" || {
+              echo "MISSING: $pkg"
+              PKG_CONFIG_PATH=$PKGDIR pkg-config --print-errors --libs --cflags "$pkg" || true
+              missing=1
+            }
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Bundle diagnostic: missing pkg-config entries"
+            exit 1
+          fi
+
+
+  validate-bundle-macos:
+    name: Validate macOS Intel bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install pkg-config
+        run: sudo apt-get update && sudo apt-get install -y pkg-config
+      - name: List bundle pkgconfig files
+        run: |
+          echo "Bundle pkgconfig content:"
+          ls -la dependencies_bundle/macos/intel/lib/pkgconfig || true
+      - name: Validate required pkg-config entries
+        run: |
+          set -euo pipefail
+          PKGDIR=dependencies_bundle/macos/intel/lib/pkgconfig
+          missing=0
+          pkgs="pango pangocairo cairo fontconfig libpng zlib bzip2 libffi freetype2 harfbuzz pixman-1 libpcre2-8"
+          for pkg in $pkgs; do
+            echo "Checking $pkg..."
+            PKG_CONFIG_PATH=$PKGDIR pkg-config --exists "$pkg" || {
+              echo "MISSING: $pkg"
+              PKG_CONFIG_PATH=$PKGDIR pkg-config --print-errors --libs --cflags "$pkg" || true
+              missing=1
+            }
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "Bundle validation failed: missing packages"
+            exit 1
+          fi
 
   build-macos-arm64:
     name: Build macOS (arm64)
