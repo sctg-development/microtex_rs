@@ -303,6 +303,23 @@ extern "C"
    */
   MICROTEX_CAPI unsigned char *microtex_render_to_svg(RenderPtr render, unsigned long *out_len);
 
+  /**
+   * Render a previously parsed render to SVG with dimensional metrics.
+   *
+   * Returns a malloc'd buffer containing a JSON object with two fields:
+   *   - "svg": the SVG content as a string
+   *   - "metrics": an object containing dimensional data:
+   *     - "width": render width in pixels
+   *     - "height": render height + depth in pixels
+   *     - "depth": render depth in pixels
+   *     - "ascent": render height (without depth)
+   *
+   * The caller must free the returned buffer by calling [microtex_free_buffer()].
+   * This function is useful when precise dimension information is needed alongside
+   * the rendered SVG content for proper scaling and positioning.
+   */
+  MICROTEX_CAPI unsigned char *microtex_render_to_svg_with_metrics(RenderPtr render, unsigned long *out_len);
+
   /** Free a buffer returned by microtex_render_to_svg. */
   MICROTEX_CAPI void microtex_free_buffer(unsigned char *buf);
   /** Increment the reference count for a buffer returned by microtex_render_to_svg. */

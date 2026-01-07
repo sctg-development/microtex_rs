@@ -566,6 +566,7 @@ void microtex_deleteRender(RenderPtr render);
 DrawingData microtex_getDrawingData(RenderPtr render);
 void microtex_freeDrawingData(DrawingData data);
 unsigned char* microtex_render_to_svg(RenderPtr render, unsigned long* len);
+unsigned char* microtex_render_to_svg_with_metrics(RenderPtr render, unsigned long* len);
 void microtex_free_buffer(void* ptr);
 
 #ifdef __cplusplus

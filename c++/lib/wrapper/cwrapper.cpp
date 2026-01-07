@@ -307,12 +307,154 @@ extern "C"
     return out;
   }
 
+  // Helper function to create a simple JSON string with render metrics
+  // This avoids depending on external JSON libraries
+  static std::string render_metrics_to_json(Render *r, const std::string &svg_content)
+  {
+    // Escape SVG content for JSON by replacing quotes and backslashes
+    std::string escaped_svg;
+    for (char c : svg_content)
+    {
+      if (c == '"')
+        escaped_svg += "\\\"";
+      else if (c == '\\')
+        escaped_svg += "\\\\";
+      else if (c == '\n')
+        escaped_svg += "\\n";
+      else if (c == '\r')
+        escaped_svg += "\\r";
+      else
+        escaped_svg += c;
+    }
+
+    // Build JSON object with SVG and metrics
+    char json_buffer[4096];
+    int written = snprintf(
+        json_buffer,
+        sizeof(json_buffer),
+        "{"
+        "\"svg\":\"%s\","
+        "\"metrics\":{"
+        "\"width\":%d,"
+        "\"height\":%d,"
+        "\"depth\":%d,"
+        "\"ascent\":%d"
+        "}"
+        "}",
+        escaped_svg.c_str(),
+        r->getWidth(),
+        r->getHeight() + r->getDepth(),
+        r->getDepth(),
+        r->getHeight());
+
+    if (written < 0 || written >= (int)sizeof(json_buffer))
+    {
+      fprintf(stderr, "render_metrics_to_json: JSON buffer overflow\n");
+      return "{}";
+    }
+
+    return std::string(json_buffer);
+  }
+
+  MICROTEX_CAPI unsigned char *microtex_render_to_svg_with_metrics(RenderPtr render, unsigned long *out_len)
+  {
+    auto r = reinterpret_cast<Render *>(render);
+    if (!r)
+    {
+      fprintf(stderr, "microtex_render_to_svg_with_metrics: invalid render pointer\n");
+      if (out_len)
+        *out_len = 0;
+      return nullptr;
+    }
+
+    std::vector<unsigned char> svg_vec;
+
+    // Generate SVG content
+    cairo_surface_t *surface = cairo_svg_surface_create_for_stream(
+        svg_writer_func,
+        &svg_vec,
+        (double)r->getWidth(),
+        (double)r->getHeight());
+    if (!surface)
+    {
+      fprintf(stderr, "microtex_render_to_svg_with_metrics: failed to create cairo surface\n");
+      if (out_len)
+        *out_len = 0;
+      return nullptr;
+    }
+
+    cairo_t *cr = cairo_create(surface);
+    if (!cr)
+    {
+      fprintf(stderr, "microtex_render_to_svg_with_metrics: failed to create cairo context\n");
+      cairo_surface_destroy(surface);
+      if (out_len)
+        *out_len = 0;
+      return nullptr;
+    }
+
+    microtex::Graphics2D_cairo g2(cr);
+    r->draw(g2, 0, 0);
+
+    // Ensure the SVG stream is flushed/written
+    cairo_surface_flush(surface);
+    cairo_surface_finish(surface);
+
+    cairo_destroy(cr);
+    cairo_surface_destroy(surface);
+
+    // Convert SVG vector to string
+    std::string svg_str(svg_vec.begin(), svg_vec.end());
+
+    // Create JSON with SVG and metrics
+    std::string json_str = render_metrics_to_json(r, svg_str);
+
+    if (json_str.empty() || json_str == "{}")
+    {
+      fprintf(stderr, "microtex_render_to_svg_with_metrics: failed to create JSON\n");
+      if (out_len)
+        *out_len = 0;
+      return nullptr;
+    }
+
+    // Allocate and copy result
+    unsigned char *out = (unsigned char *)malloc(json_str.size());
+    if (!out)
+    {
+      fprintf(stderr, "microtex_render_to_svg_with_metrics: malloc failed for %zu bytes\n", json_str.size());
+      if (out_len)
+        *out_len = 0;
+      return nullptr;
+    }
+
+    memcpy(out, json_str.c_str(), json_str.size());
+
+    // Register buffer with refcount = 1
+    {
+      std::lock_guard<std::mutex> lg(__buf_ref_mutex);
+      __buf_refcounts[out] = 1;
+    }
+
+    if (out_len)
+      *out_len = json_str.size();
+
+    return out;
+  }
+
 #else
 
 // Stub implementation when HAVE_CAIRO is not defined
 MICROTEX_CAPI unsigned char *microtex_render_to_svg(RenderPtr render, unsigned long *out_len)
 {
   fprintf(stderr, "microtex_render_to_svg: Cairo support not compiled\n");
+  if (out_len)
+    *out_len = 0;
+  return nullptr;
+}
+
+MICROTEX_CAPI unsigned char *microtex_render_to_svg_with_metrics(RenderPtr render, unsigned long *out_len)
+{
+  fprintf(stderr, "microtex_render_to_svg_with_metrics: Cairo support not compiled\n");
   if (out_len)
     *out_len = 0;
   return nullptr;

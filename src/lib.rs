@@ -141,6 +141,38 @@ mod shim {
         super::ffi::microtex_render_to_svg(render_ptr as *mut _, out_len)
     }
 
+    /// Wrapper for microtex_render_to_svg_with_metrics.
+    /// 
+    /// Calls the C++ FFI function that returns a JSON buffer containing SVG + metrics.
+    /// On Windows, converts between 32-bit and 64-bit unsigned long types.
+    #[cfg(all(not(test), target_os = "windows"))]
+    pub unsafe fn microtex_render_to_svg_with_metrics(
+        render_ptr: *mut c_void,
+        out_len: &mut u64,
+    ) -> *mut u8 {
+        // Windows uses 32-bit c_ulong; call the FFI with a local u32 and then
+        // copy it back into the provided u64 reference.
+        let mut len32: std::os::raw::c_ulong = 0;
+        let ptr = super::ffi::microtex_render_to_svg_with_metrics(
+            render_ptr as *mut _,
+            &mut len32 as *mut _,
+        );
+        *out_len = len32 as u64;
+        ptr
+    }
+
+    /// Wrapper for microtex_render_to_svg_with_metrics on Unix-like systems.
+    ///
+    /// On Unix-like systems the binding's c_ulong will match u64, so we pass through directly.
+    #[cfg(all(not(test), not(target_os = "windows")))]
+    pub unsafe fn microtex_render_to_svg_with_metrics(
+        render_ptr: *mut c_void,
+        out_len: &mut u64,
+    ) -> *mut u8 {
+        // On Unix-like systems the binding's c_ulong will match u64
+        super::ffi::microtex_render_to_svg_with_metrics(render_ptr as *mut _, out_len)
+    }
+
     #[cfg(not(test))]
     pub unsafe fn microtex_delete_render(render_ptr: *mut c_void) {
         super::ffi::microtex_deleteRender(render_ptr as *mut _);
@@ -243,6 +275,28 @@ mod shim {
             }
         }
 
+        /// Test implementation of microtex_render_to_svg_with_metrics.
+        ///
+        /// Returns the buffer configured via test_control::set_buffer, which should
+        /// contain JSON with SVG and metrics data.
+        pub unsafe fn microtex_render_to_svg_with_metrics(
+            _render_ptr: *mut c_void,
+            out_len: &mut u64,
+        ) -> *mut u8 {
+            if crate::test_control::get_return_empty() {
+                *out_len = 0;
+                std::ptr::null_mut()
+            } else {
+                let (ptr, len) = crate::test_control::get_out_buffer_ptr();
+                *out_len = len;
+                if len == 0 || ptr.is_null() {
+                    std::ptr::null_mut()
+                } else {
+                    ptr as *mut u8
+                }
+            }
+        }
+
         pub unsafe fn microtex_delete_render(_ptr: *mut c_void) {
             // noop
         }
@@ -325,6 +379,16 @@ mod shim {
         test_impl::microtex_render_to_svg(render_ptr, out_len)
     }
     #[cfg(test)]
+    /// Test wrapper for microtex_render_to_svg_with_metrics.
+    ///
+    /// Delegates to the test_impl implementation which uses test_control::get_out_buffer_ptr().
+    pub unsafe fn microtex_render_to_svg_with_metrics(
+        render_ptr: *mut c_void,
+        out_len: &mut u64,
+    ) -> *mut u8 {
+        test_impl::microtex_render_to_svg_with_metrics(render_ptr, out_len)
+    }
+    #[cfg(test)]
     pub unsafe fn microtex_delete_render(render_ptr: *mut c_void) {
         test_impl::microtex_delete_render(render_ptr)
     }
@@ -392,6 +456,10 @@ pub enum RenderError {
     /// Failed to convert SVG buffer to valid UTF-8 string.
     #[error("failed to convert SVG output to UTF-8: {0}")]
     InvalidUtf8(#[from] std::string::FromUtf8Error),
+
+    /// Failed to parse the JSON metrics response from the C++ renderer.
+    #[error("failed to parse JSON metrics: {0}")]
+    ParseJsonFailed(String),
 }
 
 /// Configuration for rendering LaTeX to SVG.
@@ -434,6 +502,81 @@ impl Default for RenderConfig {
             render_glyph_use_path: true,
             enable_formula_numbering: false,
         }
+    }
+}
+
+/// Dimensional metrics from rendering a LaTeX formula to SVG.
+///
+/// This structure contains the precise dimensional information of a rendered
+/// formula, useful for proper scaling and positioning in PDF documents.
+#[derive(Debug, Clone)]
+pub struct RenderMetrics {
+    /// The width of the rendered formula in pixels.
+    pub width: i32,
+
+    /// The total height of the rendered formula in pixels (height + depth).
+    pub height: i32,
+
+    /// The depth of the rendered formula below the baseline in pixels.
+    pub depth: i32,
+
+    /// The ascent of the rendered formula (height without depth) in pixels.
+    pub ascent: i32,
+}
+
+impl RenderMetrics {
+    /// Creates a new RenderMetrics instance with the specified dimensions.
+    ///
+    /// # Arguments
+    /// * `width` - The width in pixels
+    /// * `height` - The total height (height + depth) in pixels
+    /// * `depth` - The depth below baseline in pixels
+    /// * `ascent` - The ascent (height without depth) in pixels
+    pub fn new(width: i32, height: i32, depth: i32, ascent: i32) -> Self {
+        Self {
+            width,
+            height,
+            depth,
+            ascent,
+        }
+    }
+
+    /// Returns the effective visual height of the rendered content.
+    ///
+    /// This is the total height including both ascent and descent.
+    pub fn total_height(&self) -> f32 {
+        self.height as f32
+    }
+
+    /// Returns the aspect ratio (width / height) of the rendered content.
+    ///
+    /// Useful for maintaining proportional scaling when resizing.
+    pub fn aspect_ratio(&self) -> f32 {
+        if self.height > 0 {
+            self.width as f32 / self.height as f32
+        } else {
+            1.0
+        }
+    }
+}
+
+/// Result type containing both SVG content and dimensional metrics.
+///
+/// Returned by rendering functions that need to provide both the rendered
+/// SVG string and precise dimensional information for further processing.
+#[derive(Debug, Clone)]
+pub struct RenderResult {
+    /// The SVG content as a UTF-8 string.
+    pub svg: String,
+
+    /// The dimensional metrics of the rendered formula.
+    pub metrics: RenderMetrics,
+}
+
+impl RenderResult {
+    /// Creates a new RenderResult with SVG content and metrics.
+    pub fn new(svg: String, metrics: RenderMetrics) -> Self {
+        Self { svg, metrics }
     }
 }
 
@@ -612,6 +755,129 @@ impl MicroTex {
             Ok(svg_string)
         }
     }
+
+    /// Renders a LaTeX formula string to SVG format with dimensional metrics.
+    ///
+    /// This function is similar to [`render()`](Self::render), but also returns
+    /// precise dimensional information (width, height, depth, ascent) extracted
+    /// from the MicroTeX BOX TREE before SVG rendering. This is useful for
+    /// accurate scaling and positioning of the rendered formula.
+    ///
+    /// # Arguments
+    ///
+    /// * `latex_source` - The LaTeX source string to render.
+    /// * `config` - Rendering configuration parameters.
+    ///
+    /// # Returns
+    ///
+    /// A [`RenderResult`] containing both the SVG string and the metrics,
+    /// or an error if parsing/rendering fails.
+    ///
+    /// # Errors
+    ///
+    /// Returns errors if:
+    /// - The LaTeX source cannot be parsed
+    /// - The rendering process fails
+    /// - The output is empty
+    /// - The SVG or metrics JSON cannot be parsed
+    /// - Invalid UTF-8 is encountered
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use microtex_rs::{MicroTex, RenderConfig};
+    ///
+    /// let renderer = MicroTex::new()?;
+    /// let config = RenderConfig::default();
+    /// let result = renderer.render_to_svg_with_metrics(r#"\[x^2\]"#, &config)?;
+    /// println!("Width: {}, Height: {}", result.metrics.width, result.metrics.height);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn render_to_svg_with_metrics(
+        &self,
+        latex_source: &str,
+        config: &RenderConfig,
+    ) -> Result<RenderResult, RenderError> {
+        let latex_cstr = std::ffi::CString::new(latex_source)
+            .unwrap_or_else(|_| std::ffi::CString::new("").unwrap());
+
+        unsafe {
+            let render_ptr = shim::microtex_parse_render(
+                latex_cstr.as_ptr(),
+                config.dpi,
+                config.line_width,
+                config.line_height,
+                config.text_color,
+                config.has_background,
+                config.render_glyph_use_path,
+            );
+
+            if render_ptr.is_null() {
+                return Err(RenderError::ParseRenderFailed);
+            }
+
+            let mut out_len = 0u64;
+            let out_buf = shim::microtex_render_to_svg_with_metrics(render_ptr, &mut out_len);
+
+            if out_buf.is_null() || out_len == 0 {
+                shim::microtex_delete_render(render_ptr);
+                return Err(RenderError::EmptyOutput);
+            }
+
+            // Convert the buffer to a Rust string
+            let json_slice = std::slice::from_raw_parts(out_buf as *const u8, out_len as usize);
+            let json_string = String::from_utf8(json_slice.to_vec())?;
+
+            // Parse the JSON response from C++
+            let json_value: serde_json::Value = serde_json::from_str(&json_string)
+                .map_err(|e| RenderError::ParseJsonFailed(e.to_string()))?;
+
+            // Extract SVG content
+            let svg = json_value
+                .get("svg")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| RenderError::ParseJsonFailed("missing 'svg' field".to_string()))?
+                .to_string();
+
+            // Extract metrics
+            let metrics_obj = json_value
+                .get("metrics")
+                .and_then(|v| v.as_object())
+                .ok_or_else(|| RenderError::ParseJsonFailed("missing 'metrics' field".to_string()))?;
+
+            let width = metrics_obj
+                .get("width")
+                .and_then(|v| v.as_i64())
+                .ok_or_else(|| RenderError::ParseJsonFailed("missing or invalid 'width'".to_string()))?
+                as i32;
+
+            let height = metrics_obj
+                .get("height")
+                .and_then(|v| v.as_i64())
+                .ok_or_else(|| RenderError::ParseJsonFailed("missing or invalid 'height'".to_string()))?
+                as i32;
+
+            let depth = metrics_obj
+                .get("depth")
+                .and_then(|v| v.as_i64())
+                .ok_or_else(|| RenderError::ParseJsonFailed("missing or invalid 'depth'".to_string()))?
+                as i32;
+
+            let ascent = metrics_obj
+                .get("ascent")
+                .and_then(|v| v.as_i64())
+                .ok_or_else(|| RenderError::ParseJsonFailed("missing or invalid 'ascent'".to_string()))?
+                as i32;
+
+            let metrics = RenderMetrics::new(width, height, depth, ascent);
+
+            // Clean up
+            shim::microtex_free_buffer(out_buf);
+            shim::microtex_delete_render(render_ptr);
+
+            Ok(RenderResult::new(svg, metrics))
+        }
+    }
 }
 
 impl Drop for MicroTex {
@@ -775,5 +1041,176 @@ mod tests {
         let r3 = m.render("z^2", &RenderConfig::default());
         assert!(r3.is_ok());
         assert!(r3.unwrap().contains("result3"));
+    }
+
+    #[test]
+    fn test_render_to_svg_with_metrics_success() {
+        let _g = crate::shim::lock_test();
+        crate::shim::set_init_succeed(true);
+        crate::shim::set_parse_succeed(true);
+        crate::shim::set_return_empty(false);
+        
+        // Create a valid JSON response with SVG and metrics
+        let json_response = br#"{
+            "svg": "<svg>test formula</svg>",
+            "metrics": {
+                "width": 100,
+                "height": 50,
+                "depth": 10,
+                "ascent": 40
+            }
+        }"#;
+        
+        crate::shim::set_buffer(json_response);
+        
+        let m = MicroTex::new().expect("init ok");
+        let r = m.render_to_svg_with_metrics("x^2", &RenderConfig::default());
+        
+        assert!(r.is_ok());
+        let result = r.unwrap();
+        assert!(result.svg.contains("<svg"));
+        assert_eq!(result.metrics.width, 100);
+        assert_eq!(result.metrics.height, 50);
+        assert_eq!(result.metrics.depth, 10);
+        assert_eq!(result.metrics.ascent, 40);
+    }
+
+    #[test]
+    fn test_render_to_svg_with_metrics_parse_fail() {
+        let _g = crate::shim::lock_test();
+        crate::shim::set_init_succeed(true);
+        crate::shim::set_parse_succeed(false);
+        
+        let m = MicroTex::new().expect("init should succeed");
+        let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
+        
+        assert!(matches!(r, Err(RenderError::ParseRenderFailed)));
+        crate::shim::set_parse_succeed(true);
+    }
+
+    #[test]
+    fn test_render_to_svg_with_metrics_empty_output() {
+        let _g = crate::shim::lock_test();
+        crate::shim::set_init_succeed(true);
+        crate::shim::set_parse_succeed(true);
+        crate::shim::set_return_empty(true);
+        
+        let m = MicroTex::new().expect("init should succeed");
+        let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
+        
+        assert!(matches!(r, Err(RenderError::EmptyOutput)));
+        crate::shim::set_return_empty(false);
+    }
+
+    #[test]
+    fn test_render_to_svg_with_metrics_invalid_json() {
+        let _g = crate::shim::lock_test();
+        crate::shim::set_init_succeed(true);
+        crate::shim::set_parse_succeed(true);
+        crate::shim::set_return_empty(false);
+        crate::shim::set_buffer(b"not valid json");
+        
+        let m = MicroTex::new().expect("init ok");
+        let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
+        
+        assert!(matches!(r, Err(RenderError::ParseJsonFailed(_))));
+    }
+
+    #[test]
+    fn test_render_to_svg_with_metrics_missing_svg() {
+        let _g = crate::shim::lock_test();
+        crate::shim::set_init_succeed(true);
+        crate::shim::set_parse_succeed(true);
+        crate::shim::set_return_empty(false);
+        
+        // JSON missing "svg" field
+        let json_response = br#"{
+            "metrics": {
+                "width": 100,
+                "height": 50,
+                "depth": 10,
+                "ascent": 40
+            }
+        }"#;
+        
+        crate::shim::set_buffer(json_response);
+        
+        let m = MicroTex::new().expect("init ok");
+        let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
+        
+        assert!(matches!(r, Err(RenderError::ParseJsonFailed(_))));
+    }
+
+    #[test]
+    fn test_render_to_svg_with_metrics_missing_metrics() {
+        let _g = crate::shim::lock_test();
+        crate::shim::set_init_succeed(true);
+        crate::shim::set_parse_succeed(true);
+        crate::shim::set_return_empty(false);
+        
+        // JSON missing "metrics" field
+        let json_response = br#"{
+            "svg": "<svg>test</svg>"
+        }"#;
+        
+        crate::shim::set_buffer(json_response);
+        
+        let m = MicroTex::new().expect("init ok");
+        let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
+        
+        assert!(matches!(r, Err(RenderError::ParseJsonFailed(_))));
+    }
+
+    #[test]
+    fn test_render_to_svg_with_metrics_missing_width() {
+        let _g = crate::shim::lock_test();
+        crate::shim::set_init_succeed(true);
+        crate::shim::set_parse_succeed(true);
+        crate::shim::set_return_empty(false);
+        
+        // JSON with metrics missing "width" field
+        let json_response = br#"{
+            "svg": "<svg>test</svg>",
+            "metrics": {
+                "height": 50,
+                "depth": 10,
+                "ascent": 40
+            }
+        }"#;
+        
+        crate::shim::set_buffer(json_response);
+        
+        let m = MicroTex::new().expect("init ok");
+        let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
+        
+        assert!(matches!(r, Err(RenderError::ParseJsonFailed(_))));
+    }
+
+    #[test]
+    fn test_render_metrics_total_height() {
+        let metrics = RenderMetrics::new(100, 50, 10, 40);
+        assert_eq!(metrics.total_height(), 50.0);
+    }
+
+    #[test]
+    fn test_render_metrics_aspect_ratio() {
+        let metrics = RenderMetrics::new(200, 50, 10, 40);
+        assert_eq!(metrics.aspect_ratio(), 4.0);
+    }
+
+    #[test]
+    fn test_render_metrics_aspect_ratio_zero_height() {
+        let metrics = RenderMetrics::new(100, 0, 0, 0);
+        assert_eq!(metrics.aspect_ratio(), 1.0);
+    }
+
+    #[test]
+    fn test_render_result_creation() {
+        let metrics = RenderMetrics::new(100, 50, 10, 40);
+        let result = RenderResult::new("<svg>test</svg>".to_string(), metrics);
+        
+        assert_eq!(result.svg, "<svg>test</svg>");
+        assert_eq!(result.metrics.width, 100);
+        assert_eq!(result.metrics.height, 50);
     }
 }
