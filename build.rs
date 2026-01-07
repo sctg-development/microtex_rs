@@ -437,17 +437,38 @@ mod cmake_builder {
             return Err("CMake configuration failed".into());
         }
 
-        // Build with make
+        // Build using `cmake --build` to support different generators (Visual Studio on Windows, Makefile/Ninja on Unix)
         let num_jobs = num_cpus::get();
         let status = if use_arch_x86_64 {
+            // Use `arch` wrapper for macOS cross-compilation
             Command::new("arch")
                 .arg("-x86_64")
-                .arg("make")
+                .arg("cmake")
+                .arg("--build")
+                .arg(".")
+                .arg("--config")
+                .arg("Release")
+                .arg("--")
                 .arg(format!("-j{}", num_jobs))
                 .current_dir(build_dir)
                 .status()?
+        } else if cfg!(target_os = "windows") {
+            // On Windows, use CMake to drive MSBuild / Visual Studio solution
+            Command::new("cmake")
+                .arg("--build")
+                .arg(".")
+                .arg("--config")
+                .arg("Release")
+                .current_dir(build_dir)
+                .status()?
         } else {
-            Command::new("make")
+            // Default: use cmake to drive the native generator and pass parallel flags
+            Command::new("cmake")
+                .arg("--build")
+                .arg(".")
+                .arg("--config")
+                .arg("Release")
+                .arg("--")
                 .arg(format!("-j{}", num_jobs))
                 .current_dir(build_dir)
                 .status()?
