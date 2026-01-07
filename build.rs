@@ -482,21 +482,23 @@ mod cmake_builder {
         Ok(())
     }
 
-    /// Find all static libraries (.a files) in the build output
+    /// Find all static libraries (.a or .lib files) in the build output
     pub fn find_static_libraries(
         build_dir: &Path,
     ) -> Result<Vec<std::path::PathBuf>, Box<dyn std::error::Error>> {
         let mut libs = Vec::new();
 
-        // Walk the build directory looking for .a files
+        // Walk the build directory looking for .a (Unix) or .lib (Windows) files
         for entry in walkdir::WalkDir::new(build_dir)
             .into_iter()
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-            if path.extension().map_or(false, |ext| ext == "a") {
-                println!("cargo:warning=Found static library: {}", path.display());
-                libs.push(path.to_path_buf());
+            if let Some(ext) = path.extension() {
+                if ext == "a" || ext == "lib" {
+                    println!("cargo:warning=Found static library: {}", path.display());
+                    libs.push(path.to_path_buf());
+                }
             }
         }
 
@@ -811,6 +813,24 @@ mod linker_config {
             }
         }
 
+        // Also, attempt to locate any built static libraries (lib or a) and add their
+        // parent directories to the link search paths. On Windows Visual Studio
+        // generator places .lib files into e.g. `build/Release` or `build/lib/Release`.
+        if let Ok(found_libs) = crate::cmake_builder::find_static_libraries(build_dir) {
+            for lib in found_libs.iter() {
+                if let Some(dir) = lib.parent() {
+                    println!("cargo:rustc-link-search=native={}", dir.display());
+
+                    // Determine the base name for rustc (strip lib prefix on Unix)
+                    if let Some(stem) = lib.file_stem().and_then(|s| s.to_str()) {
+                        let name = if stem.starts_with("lib") { &stem[3..] } else { stem };
+                        println!("cargo:warning=Linking static library: {} (from {})", name, lib.display());
+                        println!("cargo:rustc-link-lib=static={}", name);
+                    }
+                }
+            }
+        }
+
         println!("cargo:warning=Linker configured successfully!");
         Ok(())
     }
@@ -894,14 +914,21 @@ fn main() {
     let out_dir = build_config::out_dir();
 
     // Determine whether the static library already exists and whether sources changed (using hash stamp)
-    let lib_path = build_dir.join("lib").join("libmicrotex.a");
+    // On Unix we expect `libmicrotex.a`, on Windows Visual Studio generators produce `.lib` files.
     let mut need_build = true;
 
     // Read previous hash from stamp file (if any)
     let stamp_file = out_dir.join("microtex_cpp.hash");
     let prev_hash = std::fs::read_to_string(&stamp_file).unwrap_or_default();
 
-    if lib_path.exists() && !prev_hash.is_empty() {
+    // Check for any existing static library matching microtex
+    let existing_libs = match cmake_builder::find_static_libraries(&build_dir) {
+        Ok(l) => l,
+        Err(_) => Vec::new(),
+    };
+
+    // If we found an existing microtex library and the hash matches, skip build
+    if !existing_libs.is_empty() && !prev_hash.is_empty() {
         if prev_hash == cpp_hash {
             println!(
                 "cargo:warning=Static library is up-to-date (hash matched), skipping C++ build"
@@ -911,8 +938,9 @@ fn main() {
     }
 
     // Fallback conservative check using mtimes if no stamp found
-    if need_build && lib_path.exists() {
-        if let Ok(lib_meta) = lib_path.metadata() {
+    if need_build && !existing_libs.is_empty() {
+        // pick the first lib for mtime comparison
+        if let Ok(lib_meta) = existing_libs[0].metadata() {
             if let Ok(lib_mtime) = lib_meta.modified() {
                 if let Ok(build_rs_meta) = std::fs::metadata("build.rs") {
                     if let Ok(build_rs_mtime) = build_rs_meta.modified() {
