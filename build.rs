@@ -824,8 +824,16 @@ mod linker_config {
 
                     // Determine the base name for rustc (strip lib prefix on Unix)
                     if let Some(stem) = lib.file_stem().and_then(|s| s.to_str()) {
-                        let name = if stem.starts_with("lib") { &stem[3..] } else { stem };
-                        println!("cargo:warning=Linking static library: {} (from {})", name, lib.display());
+                        let name = if stem.starts_with("lib") {
+                            &stem[3..]
+                        } else {
+                            stem
+                        };
+                        println!(
+                            "cargo:warning=Linking static library: {} (from {})",
+                            name,
+                            lib.display()
+                        );
                         println!("cargo:rustc-link-lib=static={}", name);
                     }
                 }

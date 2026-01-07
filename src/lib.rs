@@ -142,7 +142,7 @@ mod shim {
     }
 
     /// Wrapper for microtex_render_to_svg_with_metrics.
-    /// 
+    ///
     /// Calls the C++ FFI function that returns a JSON buffer containing SVG + metrics.
     /// On Windows, converts between 32-bit and 64-bit unsigned long types.
     #[cfg(all(not(test), target_os = "windows"))]
@@ -843,31 +843,37 @@ impl MicroTex {
             let metrics_obj = json_value
                 .get("metrics")
                 .and_then(|v| v.as_object())
-                .ok_or_else(|| RenderError::ParseJsonFailed("missing 'metrics' field".to_string()))?;
+                .ok_or_else(|| {
+                    RenderError::ParseJsonFailed("missing 'metrics' field".to_string())
+                })?;
 
             let width = metrics_obj
                 .get("width")
                 .and_then(|v| v.as_i64())
-                .ok_or_else(|| RenderError::ParseJsonFailed("missing or invalid 'width'".to_string()))?
-                as i32;
+                .ok_or_else(|| {
+                    RenderError::ParseJsonFailed("missing or invalid 'width'".to_string())
+                })? as i32;
 
             let height = metrics_obj
                 .get("height")
                 .and_then(|v| v.as_i64())
-                .ok_or_else(|| RenderError::ParseJsonFailed("missing or invalid 'height'".to_string()))?
-                as i32;
+                .ok_or_else(|| {
+                    RenderError::ParseJsonFailed("missing or invalid 'height'".to_string())
+                })? as i32;
 
             let depth = metrics_obj
                 .get("depth")
                 .and_then(|v| v.as_i64())
-                .ok_or_else(|| RenderError::ParseJsonFailed("missing or invalid 'depth'".to_string()))?
-                as i32;
+                .ok_or_else(|| {
+                    RenderError::ParseJsonFailed("missing or invalid 'depth'".to_string())
+                })? as i32;
 
             let ascent = metrics_obj
                 .get("ascent")
                 .and_then(|v| v.as_i64())
-                .ok_or_else(|| RenderError::ParseJsonFailed("missing or invalid 'ascent'".to_string()))?
-                as i32;
+                .ok_or_else(|| {
+                    RenderError::ParseJsonFailed("missing or invalid 'ascent'".to_string())
+                })? as i32;
 
             let metrics = RenderMetrics::new(width, height, depth, ascent);
 
@@ -1049,7 +1055,7 @@ mod tests {
         crate::shim::set_init_succeed(true);
         crate::shim::set_parse_succeed(true);
         crate::shim::set_return_empty(false);
-        
+
         // Create a valid JSON response with SVG and metrics
         let json_response = br#"{
             "svg": "<svg>test formula</svg>",
@@ -1060,12 +1066,12 @@ mod tests {
                 "ascent": 40
             }
         }"#;
-        
+
         crate::shim::set_buffer(json_response);
-        
+
         let m = MicroTex::new().expect("init ok");
         let r = m.render_to_svg_with_metrics("x^2", &RenderConfig::default());
-        
+
         assert!(r.is_ok());
         let result = r.unwrap();
         assert!(result.svg.contains("<svg"));
@@ -1080,10 +1086,10 @@ mod tests {
         let _g = crate::shim::lock_test();
         crate::shim::set_init_succeed(true);
         crate::shim::set_parse_succeed(false);
-        
+
         let m = MicroTex::new().expect("init should succeed");
         let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
-        
+
         assert!(matches!(r, Err(RenderError::ParseRenderFailed)));
         crate::shim::set_parse_succeed(true);
     }
@@ -1094,10 +1100,10 @@ mod tests {
         crate::shim::set_init_succeed(true);
         crate::shim::set_parse_succeed(true);
         crate::shim::set_return_empty(true);
-        
+
         let m = MicroTex::new().expect("init should succeed");
         let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
-        
+
         assert!(matches!(r, Err(RenderError::EmptyOutput)));
         crate::shim::set_return_empty(false);
     }
@@ -1109,10 +1115,10 @@ mod tests {
         crate::shim::set_parse_succeed(true);
         crate::shim::set_return_empty(false);
         crate::shim::set_buffer(b"not valid json");
-        
+
         let m = MicroTex::new().expect("init ok");
         let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
-        
+
         assert!(matches!(r, Err(RenderError::ParseJsonFailed(_))));
     }
 
@@ -1122,7 +1128,7 @@ mod tests {
         crate::shim::set_init_succeed(true);
         crate::shim::set_parse_succeed(true);
         crate::shim::set_return_empty(false);
-        
+
         // JSON missing "svg" field
         let json_response = br#"{
             "metrics": {
@@ -1132,12 +1138,12 @@ mod tests {
                 "ascent": 40
             }
         }"#;
-        
+
         crate::shim::set_buffer(json_response);
-        
+
         let m = MicroTex::new().expect("init ok");
         let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
-        
+
         assert!(matches!(r, Err(RenderError::ParseJsonFailed(_))));
     }
 
@@ -1147,17 +1153,17 @@ mod tests {
         crate::shim::set_init_succeed(true);
         crate::shim::set_parse_succeed(true);
         crate::shim::set_return_empty(false);
-        
+
         // JSON missing "metrics" field
         let json_response = br#"{
             "svg": "<svg>test</svg>"
         }"#;
-        
+
         crate::shim::set_buffer(json_response);
-        
+
         let m = MicroTex::new().expect("init ok");
         let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
-        
+
         assert!(matches!(r, Err(RenderError::ParseJsonFailed(_))));
     }
 
@@ -1167,7 +1173,7 @@ mod tests {
         crate::shim::set_init_succeed(true);
         crate::shim::set_parse_succeed(true);
         crate::shim::set_return_empty(false);
-        
+
         // JSON with metrics missing "width" field
         let json_response = br#"{
             "svg": "<svg>test</svg>",
@@ -1177,12 +1183,12 @@ mod tests {
                 "ascent": 40
             }
         }"#;
-        
+
         crate::shim::set_buffer(json_response);
-        
+
         let m = MicroTex::new().expect("init ok");
         let r = m.render_to_svg_with_metrics("x", &RenderConfig::default());
-        
+
         assert!(matches!(r, Err(RenderError::ParseJsonFailed(_))));
     }
 
@@ -1208,7 +1214,7 @@ mod tests {
     fn test_render_result_creation() {
         let metrics = RenderMetrics::new(100, 50, 10, 40);
         let result = RenderResult::new("<svg>test</svg>".to_string(), metrics);
-        
+
         assert_eq!(result.svg, "<svg>test</svg>");
         assert_eq!(result.metrics.width, 100);
         assert_eq!(result.metrics.height, 50);
