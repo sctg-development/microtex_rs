@@ -73,8 +73,18 @@ pub mod test_control {
 mod shim {
     use std::ffi::c_void;
 
-    #[cfg(not(test))]
+    // Non-test shim: convert Rust u64 length to the C `unsigned long` width
+    // expected by the generated bindings. On Windows `unsigned long` is 32-bit,
+    // on Unix it is typically 64-bit. Use conditional compilation to handle both.
+    #[cfg(all(not(test), target_os = "windows"))]
     pub unsafe fn microtex_init(len: u64, ptr: *const u8) -> *mut c_void {
+        // Convert to c_ulong (u32 on Windows). Panic if impossible (overflow).
+        super::ffi::microtex_init(len.try_into().unwrap(), ptr as *const _)
+    }
+
+    #[cfg(all(not(test), not(target_os = "windows")))]
+    pub unsafe fn microtex_init(len: u64, ptr: *const u8) -> *mut c_void {
+        // On Unix-like systems c_ulong is typically 64-bit so pass through
         super::ffi::microtex_init(len, ptr as *const _)
     }
 
@@ -115,8 +125,19 @@ mod shim {
         )
     }
 
-    #[cfg(not(test))]
+    #[cfg(all(not(test), target_os = "windows"))]
     pub unsafe fn microtex_render_to_svg(render_ptr: *mut c_void, out_len: &mut u64) -> *mut u8 {
+        // Windows uses 32-bit c_ulong; call the FFI with a local u32 and then
+        // copy it back into the provided u64 reference.
+        let mut len32: std::os::raw::c_ulong = 0;
+        let ptr = super::ffi::microtex_render_to_svg(render_ptr as *mut _, &mut len32 as *mut _);
+        *out_len = len32 as u64;
+        ptr
+    }
+
+    #[cfg(all(not(test), not(target_os = "windows")))]
+    pub unsafe fn microtex_render_to_svg(render_ptr: *mut c_void, out_len: &mut u64) -> *mut u8 {
+        // On Unix-like systems the binding's c_ulong will match u64
         super::ffi::microtex_render_to_svg(render_ptr as *mut _, out_len)
     }
 
