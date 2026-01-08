@@ -327,6 +327,28 @@ mod shim {
             }
         }
 
+        /// Test implementation of microtex_get_key_char_metrics.
+        ///
+        /// Returns the buffer configured via test_control::set_buffer, which should
+        /// contain JSON with key character metrics data.
+        pub unsafe fn microtex_get_key_char_metrics(
+            _render_ptr: *mut c_void,
+            out_len: &mut u64,
+        ) -> *mut u8 {
+            if crate::test_control::get_return_empty() {
+                *out_len = 0;
+                std::ptr::null_mut()
+            } else {
+                let (ptr, len) = crate::test_control::get_out_buffer_ptr();
+                *out_len = len;
+                if len == 0 || ptr.is_null() {
+                    std::ptr::null_mut()
+                } else {
+                    ptr as *mut u8
+                }
+            }
+        }
+
         pub unsafe fn microtex_delete_render(_ptr: *mut c_void) {
             // noop
         }
@@ -417,6 +439,16 @@ mod shim {
         out_len: &mut u64,
     ) -> *mut u8 {
         test_impl::microtex_render_to_svg_with_metrics(render_ptr, out_len)
+    }
+    #[cfg(test)]
+    /// Test wrapper for microtex_get_key_char_metrics.
+    ///
+    /// Delegates to the test_impl implementation which uses test_control::get_out_buffer_ptr().
+    pub unsafe fn microtex_get_key_char_metrics(
+        render_ptr: *mut c_void,
+        out_len: &mut u64,
+    ) -> *mut u8 {
+        test_impl::microtex_get_key_char_metrics(render_ptr, out_len)
     }
     #[cfg(test)]
     pub unsafe fn microtex_delete_render(render_ptr: *mut c_void) {
