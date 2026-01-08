@@ -13,6 +13,7 @@ mod ffi {
 
 use std::fmt;
 use thiserror::Error;
+use serde::{Deserialize, Serialize};
 
 // Re-export CLM helpers generated at build time
 include!(concat!(env!("OUT_DIR"), "/embedded_clms.rs"));
@@ -181,6 +182,35 @@ mod shim {
     #[cfg(not(test))]
     pub unsafe fn microtex_free_buffer(buf: *mut u8) {
         super::ffi::microtex_free_buffer(buf as *mut _);
+    }
+
+    /// Wrapper for microtex_get_key_char_metrics.
+    ///
+    /// Calls the C++ FFI function that returns a JSON buffer with key character metrics.
+    /// On Windows, converts between 32-bit and 64-bit unsigned long types.
+    #[cfg(all(not(test), target_os = "windows"))]
+    pub unsafe fn microtex_get_key_char_metrics(
+        render_ptr: *mut c_void,
+        out_len: &mut u64,
+    ) -> *mut u8 {
+        let mut len32: std::os::raw::c_ulong = 0;
+        let ptr = super::ffi::microtex_get_key_char_metrics(
+            render_ptr as *mut _,
+            &mut len32 as *mut _,
+        );
+        *out_len = len32 as u64;
+        ptr
+    }
+
+    /// Wrapper for microtex_get_key_char_metrics on Unix-like systems.
+    ///
+    /// On Unix-like systems the binding's c_ulong will match u64, so we pass through directly.
+    #[cfg(all(not(test), not(target_os = "windows")))]
+    pub unsafe fn microtex_get_key_char_metrics(
+        render_ptr: *mut c_void,
+        out_len: &mut u64,
+    ) -> *mut u8 {
+        super::ffi::microtex_get_key_char_metrics(render_ptr as *mut _, out_len)
     }
 
     #[cfg(not(test))]
@@ -558,6 +588,20 @@ impl RenderMetrics {
             1.0
         }
     }
+
+    /// Returns the baseline ratio (ascent / total height) of the rendered content.
+    ///
+    /// This indicates how much of the formula's height is above the baseline.
+    /// - Values close to 1.0: tall formulas with many superscripts
+    /// - Values close to 0.5: balanced formulas
+    /// - Values close to 0.0: deep formulas with many subscripts or fractions
+    pub fn baseline_ratio(&self) -> f32 {
+        if self.height > 0 {
+            self.ascent as f32 / self.height as f32
+        } else {
+            0.5
+        }
+    }
 }
 
 /// Result type containing both SVG content and dimensional metrics.
@@ -571,16 +615,135 @@ pub struct RenderResult {
 
     /// The dimensional metrics of the rendered formula.
     pub metrics: RenderMetrics,
+
+    /// Metrics of key characters in the formula (optional).
+    /// Available when rendering with KeyCharMetrics extraction.
+    pub key_char_metrics: Option<KeyCharMetrics>,
 }
 
 impl RenderResult {
     /// Creates a new RenderResult with SVG content and metrics.
     pub fn new(svg: String, metrics: RenderMetrics) -> Self {
-        Self { svg, metrics }
+        Self {
+            svg,
+            metrics,
+            key_char_metrics: None,
+        }
+    }
+
+    /// Creates a new RenderResult with SVG content, metrics, and key character metrics.
+    pub fn with_key_char_metrics(
+        svg: String,
+        metrics: RenderMetrics,
+        key_char_metrics: KeyCharMetrics,
+    ) -> Self {
+        Self {
+            svg,
+            metrics,
+            key_char_metrics: Some(key_char_metrics),
+        }
     }
 }
 
-/// The MicroTeX renderer for converting LaTeX formulas to SVG.
+/// Metrics for key characters extracted from the formula's BOX TREE.
+///
+/// Contains the heights of actual character boxes at the top level of the
+/// formula structure, excluding decorative elements and nested structures.
+/// This is used to calculate more accurate scaling factors that account
+/// for formula complexity (fractions, subscripts, etc.).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KeyCharMetrics {
+    /// Heights of individual key characters in the formula
+    pub key_char_heights: Vec<i32>,
+    
+    /// Number of key characters found
+    pub key_char_count: i32,
+    
+    /// Average height of key characters
+    pub average_char_height: f32,
+    
+    /// Maximum character height
+    pub max_char_height: i32,
+    
+    /// Minimum character height
+    pub min_char_height: i32,
+    
+    /// Total height of BOX TREE root in MicroTeX units (used for normalization)
+    pub box_tree_height: f32,
+}
+
+impl KeyCharMetrics {
+    /// Creates new KeyCharMetrics from parsed JSON data.
+    pub fn new(
+        key_char_heights: Vec<i32>,
+        key_char_count: i32,
+        average_char_height: f32,
+        max_char_height: i32,
+        min_char_height: i32,
+        box_tree_height: f32,
+    ) -> Self {
+        Self {
+            key_char_heights,
+            key_char_count,
+            average_char_height,
+            max_char_height,
+            min_char_height,
+            box_tree_height,
+        }
+    }
+    
+    /// Parses KeyCharMetrics from a JSON string returned from C++.
+    pub fn from_json(json: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let value: serde_json::Value = serde_json::from_str(json)?;
+        
+        let key_char_heights: Vec<i32> = value
+            .get("key_char_heights")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_i64())
+                    .map(|v| v as i32)
+                    .collect()
+            })
+            .unwrap_or_default();
+        
+        let key_char_count = value
+            .get("key_char_count")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i32;
+        
+        let average_char_height = value
+            .get("average_char_height")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0) as f32;
+        
+        let max_char_height = value
+            .get("max_char_height")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i32;
+        
+        let min_char_height = value
+            .get("min_char_height")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0) as i32;
+        
+        let box_tree_height = value
+            .get("box_tree_height")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0) as f32;
+        
+        Ok(Self {
+            key_char_heights,
+            key_char_count,
+            average_char_height,
+            max_char_height,
+            min_char_height,
+            box_tree_height,
+        })
+    }
+}
+
+///
 ///
 /// This struct manages the lifecycle of a MicroTeX instance and provides
 /// safe methods to render LaTeX strings to SVG format. It automatically
@@ -877,12 +1040,68 @@ impl MicroTex {
 
             let metrics = RenderMetrics::new(width, height, depth, ascent);
 
+            // Try to extract key character metrics
+            let key_char_metrics = get_key_char_metrics(render_ptr).ok();
+
             // Clean up
             shim::microtex_free_buffer(out_buf);
             shim::microtex_delete_render(render_ptr);
 
-            Ok(RenderResult::new(svg, metrics))
+            let result = match key_char_metrics {
+                Some(kcm) => RenderResult::with_key_char_metrics(svg, metrics, kcm),
+                None => RenderResult::new(svg, metrics),
+            };
+
+            Ok(result)
         }
+    }
+}
+
+/// Get metrics of key characters in a rendered formula.
+///
+/// This function extracts the heights of actual character boxes at the
+/// top level of the formula structure, excluding decorative elements.
+/// This is useful for calculating more accurate scaling factors that
+/// account for formula complexity (fractions, subscripts, etc.).
+///
+/// # Arguments
+///
+/// * `render_ptr` - The render pointer from `parse_render`
+///
+/// # Returns
+///
+/// A `KeyCharMetrics` struct containing the heights of key characters
+/// and statistical information about them.
+///
+/// # Errors
+///
+/// Returns [`RenderError`] if the rendering operation fails or the
+/// JSON parsing fails.
+pub fn get_key_char_metrics(render_ptr: *mut std::ffi::c_void) -> Result<KeyCharMetrics, RenderError> {
+    if render_ptr.is_null() {
+        return Err(RenderError::ParseRenderFailed);
+    }
+
+    unsafe {
+        let mut out_len = 0u64;
+        let out_buf = shim::microtex_get_key_char_metrics(render_ptr, &mut out_len);
+
+        if out_buf.is_null() || out_len == 0 {
+            return Err(RenderError::EmptyOutput);
+        }
+
+        // Convert the buffer to a Rust string
+        let json_slice = std::slice::from_raw_parts(out_buf as *const u8, out_len as usize);
+        let json_string = String::from_utf8(json_slice.to_vec())?;
+
+        // Parse the JSON response
+        let metrics = KeyCharMetrics::from_json(&json_string)
+            .map_err(|e| RenderError::ParseJsonFailed(e.to_string()))?;
+
+        // Clean up
+        shim::microtex_free_buffer(out_buf);
+
+        Ok(metrics)
     }
 }
 

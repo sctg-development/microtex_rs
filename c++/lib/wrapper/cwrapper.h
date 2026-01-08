@@ -286,6 +286,18 @@ extern "C"
   /** Get the render depth. */
   MICROTEX_CAPI int microtex_getRenderDepth(RenderPtr render);
 
+  /**
+   * Get the baseline ratio of the rendered formula.
+   *
+   * Returns a value between 0.0 and 1.0 indicating the proportion of the formula's
+   * total height that is above the baseline (ascent). This is useful for analyzing
+   * the visual distribution of a formula:
+   * - Values close to 1.0: tall formulas with many superscripts
+   * - Values close to 0.5: balanced formulas
+   * - Values close to 0.0: deep formulas with many subscripts or fractions
+   */
+  MICROTEX_CAPI float microtex_getRenderBaseline(RenderPtr render);
+
   /** Test if the render is split (has new line). */
   MICROTEX_CAPI bool microtex_isRenderSplit(RenderPtr render);
 
@@ -319,6 +331,24 @@ extern "C"
    * the rendered SVG content for proper scaling and positioning.
    */
   MICROTEX_CAPI unsigned char *microtex_render_to_svg_with_metrics(RenderPtr render, unsigned long *out_len);
+
+  /**
+   * Extract key character metrics from the BOX TREE structure.
+   *
+   * Returns a malloc'd buffer containing a JSON object with:
+   *   - "key_char_heights": array of heights for primary CharBox elements
+   *   - "key_char_depths": array of depths for primary CharBox elements
+   *   - "average_char_height": average height of key characters
+   *   - "max_char_height": maximum height among key characters
+   *   - "min_char_height": minimum height among key characters
+   *
+   * These metrics can be used to determine the actual visual size of a formula
+   * independent of nested structures like fractions. Key characters are identified
+   * as CharBox elements at or near the top level of the BOX TREE.
+   *
+   * The caller must free the returned buffer by calling [microtex_free_buffer()].
+   */
+  MICROTEX_CAPI unsigned char *microtex_get_key_char_metrics(RenderPtr render, unsigned long *out_len);
 
   /** Free a buffer returned by microtex_render_to_svg. */
   MICROTEX_CAPI void microtex_free_buffer(unsigned char *buf);

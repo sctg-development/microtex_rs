@@ -52,6 +52,20 @@ public:
 
   /** Draw the formula */
   void draw(Graphics2D& g2, int x, int y);
+
+  /** Extract metrics of key characters in the formula (top-level CharBox heights).
+   * 
+   * Returns vectors of heights and depths, useful for calculating accurate scale factors
+   * that account for formula complexity (fractions, subscripts, etc).
+   */
+  void getKeyCharMetrics(std::vector<int>& heights, std::vector<int>& depths);
+
+  /** Get the total height of the BOX TREE root in MicroTeX units.
+   * 
+   * This is used to normalize CharBox heights from internal MicroTeX units to pixels.
+   * Returns the height (ascent + depth) of the root box in MicroTeX internal units.
+   */
+  float getBoxTreeHeight() const;
 };
 
 }  // namespace microtex

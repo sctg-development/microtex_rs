@@ -567,6 +567,7 @@ DrawingData microtex_getDrawingData(RenderPtr render);
 void microtex_freeDrawingData(DrawingData data);
 unsigned char* microtex_render_to_svg(RenderPtr render, unsigned long* len);
 unsigned char* microtex_render_to_svg_with_metrics(RenderPtr render, unsigned long* len);
+unsigned char* microtex_get_key_char_metrics(RenderPtr render, unsigned long* len);
 void microtex_free_buffer(void* ptr);
 
 #ifdef __cplusplus
@@ -742,6 +743,72 @@ mod linker_config {
         #[cfg(target_os = "windows")]
         {
             println!("cargo:rustc-link-lib=dylib=msvcrt");
+        }
+
+        // On Windows, also try to locate vcpkg-installed libraries (cairo, pango, etc.)
+        #[cfg(target_os = "windows")]
+        {
+            if let Ok(vcpkg_root) = crate::vcpkg_manager::get_vcpkg_root() {
+                // Determine triplet from TARGET env
+                let target = std::env::var("TARGET").unwrap_or_default();
+                let triplet = if target.contains("x86_64") {
+                    "x64-windows"
+                } else if target.contains("i686") {
+                    "x86-windows"
+                } else if target.contains("aarch64") {
+                    "arm64-windows"
+                } else {
+                    "x64-windows"
+                };
+
+                let lib_dir = vcpkg_root.join("installed").join(triplet).join("lib");
+                if lib_dir.exists() {
+                    println!("cargo:warning=Adding VCPKG lib dir: {}", lib_dir.display());
+                    println!("cargo:rustc-link-search=native={}", lib_dir.display());
+
+                    // Candidate patterns to link (pick likely needed libs)
+                    let patterns = [
+                        "cairo",
+                        "pangocairo",
+                        "pango",
+                        "fontconfig",
+                        "freetype",
+                        "harfbuzz",
+                        "pixman",
+                        "png",
+                        "pcre2",
+                        "zlib",
+                        "bz2",
+                        "lzo",
+                        "ffi",
+                        "glib",
+                        "gobject",
+                        "intl",
+                    ];
+
+                    if let Ok(iter) = std::fs::read_dir(&lib_dir) {
+                        for entry in iter.filter_map(|e| e.ok()) {
+                            if let Some(name) = entry.path().file_name().and_then(|s| s.to_str()) {
+                                if name.ends_with(".lib") {
+                                    let stem = name.trim_end_matches(".lib");
+                                    for pat in &patterns {
+                                        if stem.contains(pat) {
+                                            println!("cargo:warning=Linking vcpkg candidate: {} (stem: {})", name, stem);
+                                            // Use 'dylib' to link against import libraries for DLLs
+                                            println!("cargo:rustc-link-lib=dylib={}", stem);
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    println!("cargo:warning=VCPKG lib dir not found: {}", lib_dir.display());
+                }
+            } else {
+                println!("cargo:warning=vcpkg not found; skipping vcpkg link search");
+            }
         }
 
         // Use pkg-config to find and link all Cairo and Pango dependencies
