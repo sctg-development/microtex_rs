@@ -804,7 +804,10 @@ mod linker_config {
                         }
                     }
                 } else {
-                    println!("cargo:warning=VCPKG lib dir not found: {}", lib_dir.display());
+                    println!(
+                        "cargo:warning=VCPKG lib dir not found: {}",
+                        lib_dir.display()
+                    );
                 }
             } else {
                 println!("cargo:warning=vcpkg not found; skipping vcpkg link search");
