@@ -1,5 +1,6 @@
 # MicroTeX Rust Bindings
-
+![](https://tokeisrv.sctg.eu.org/b1/github/sctg-development/microtex_rs?type=Rust,C,CHeader,Cpp&category=code)
+![](https://tokeisrv.sctg.eu.org/b1/github/sctg-development/microtex_rs?type=Rust,C,CHeader,Cpp&category=comments)
 [![codecov](https://codecov.io/gh/sctg-development/microtex_rs/branch/main/graph/badge.svg)](https://codecov.io/gh/sctg-development/microtex_rs)
 
 Safe Rust bindings for [MicroTeX](https://github.com/NanoMichael/MicroTeX), a lightweight LaTeX interpreter that can render mathematical formulas to SVG format.
