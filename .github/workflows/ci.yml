@@ -194,7 +194,7 @@ jobs:
       - name: Run tarpaulin and generate Cobertura XML
         # Generate coverage report in Cobertura-compatible XML
         run: |
-          cargo tarpaulin --out Xml || true
+          cargo tarpaulin --out Xml --all-features || true
           # tarpaulin may output multiple xml filenames; normalize to cobertura.xml
           if [ -f tarpaulin-report.xml ]; then mv tarpaulin-report.xml cobertura.xml; fi
           if [ -f coverage.xml ] && [ ! -f cobertura.xml ]; then mv coverage.xml cobertura.xml; fi
