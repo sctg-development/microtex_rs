@@ -779,27 +779,37 @@ impl KeyCharMetrics {
 /// safe methods to render LaTeX strings to SVG format. It automatically
 /// handles initialization and cleanup of the underlying C++ library.
 ///
-/// # Example
+/// **Important:** The MicroTeX engine must be initialized **only once**.
+/// Calling `MicroTex::new()` multiple times (concurrently or sequentially)
+/// can crash the underlying C++ engine. Prefer using a thread-safe
+/// singleton for global access. Example:
 ///
 /// ```rust
-/// use microtex_rs::{MicroTex, RenderConfig};
+/// use std::sync::OnceLock;
+/// use microtex_rs::{MicroTex, RenderConfig, RenderError};
 ///
-/// // Create a new renderer with embedded fonts
-/// let renderer = MicroTex::new()?;
+/// // Global MicroTeX renderer instance - initialized only once
+/// static MICROTEX_RENDERER: OnceLock<MicroTex> = OnceLock::new();
 ///
-/// // Create a configuration for rendering
-/// let config = RenderConfig {
-///     dpi: 720,
-///     line_width: 20.0,
-///     line_height: 20.0 / 3.0,
-///     text_color: 0xff000000,
-///     ..Default::default()
-/// };
+/// // Get or initialize the MicroTeX renderer (thread-safe singleton).
+/// // `MicroTex::new()` is fallible and must only be called once.
+/// fn get_microtex_renderer() -> Result<&'static MicroTex, RenderError> {
+///     if let Some(renderer) = MICROTEX_RENDERER.get() {
+///         return Ok(renderer);
+///     }
 ///
-/// // Render a simple LaTeX formula
-/// let latex = r#"\[E = mc^2\]"#;
-/// let svg = renderer.render(latex, &config)?;
-/// assert!(!svg.is_empty());
+///     // Initialize once and store the instance in the OnceLock
+///     let renderer = MicroTex::new()?;
+///     MICROTEX_RENDERER
+///         .set(renderer)
+///         .map_err(|_| RenderError::InitializationFailed)?;
+///     Ok(MICROTEX_RENDERER.get().unwrap())
+/// }
+///
+/// // Use the shared renderer
+/// let renderer = get_microtex_renderer()?;
+/// let config = RenderConfig::default();
+/// let svg = renderer.render(r#"\[E = mc^2\]"#, &config)?;
 /// assert!(svg.contains("<svg"));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
@@ -1186,11 +1196,23 @@ impl MicroTex {
     ///
     /// # Example
     ///
-    /// ```rust
-    /// use microtex_rs::MicroTex;
+    /// The MicroTeX renderer must only be initialized once; prefer using a global
+    /// singleton (for example, `OnceLock`) to avoid multiple initializations. Example:
     ///
-    /// let renderer = MicroTex::new()?;
-    /// // Use renderer...
+    /// ```rust
+    /// use std::sync::OnceLock;
+    /// use microtex_rs::{MicroTex, RenderError};
+    ///
+    /// static MICROTEX_RENDERER: OnceLock<MicroTex> = OnceLock::new();
+    ///
+    /// fn get_microtex_renderer() -> Result<&'static MicroTex, RenderError> {
+    ///     if let Some(r) = MICROTEX_RENDERER.get() { return Ok(r); }
+    ///     let renderer = MicroTex::new()?;
+    ///     MICROTEX_RENDERER.set(renderer).map_err(|_| RenderError::InitializationFailed)?;
+    ///     Ok(MICROTEX_RENDERER.get().unwrap())
+    /// }
+    ///
+    /// let _renderer = get_microtex_renderer()?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     pub fn new() -> Result<Self, RenderError> {
