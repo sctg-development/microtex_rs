@@ -200,10 +200,11 @@ jobs:
           if [ -f coverage.xml ] && [ ! -f cobertura.xml ]; then mv coverage.xml cobertura.xml; fi
           ls -la || true
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: cobertura.xml
           flags: tarpaulin
+          disable_search: true
           slug: sctg-development/microtex_rs
           token: ${{ secrets.CODECOV_TOKEN }}
         env:
