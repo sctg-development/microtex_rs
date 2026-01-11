@@ -36,6 +36,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let svg_len = svg.len();
                 println!("✓ Success! Generated SVG ({} bytes)", svg_len);
                 println!("  First 100 chars: {}", &svg[..100.min(svg.len())]);
+
+                // Check for data-dpi attribute
+                if svg.contains(r#"data-dpi="720""#) {
+                    println!("  ✓ data-dpi attribute found!");
+                } else {
+                    println!("  ✗ WARNING: data-dpi attribute NOT found!");
+                }
             }
             Err(e) => {
                 eprintln!("✗ Failed: {}", e);

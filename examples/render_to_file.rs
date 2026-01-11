@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = MicroTex::new()?;
 
     // Create output directory
-    let output_dir = "svg_output";
+    let output_dir = "examples/svg_output";
     fs::create_dir_all(output_dir)?;
     println!("Output directory: {}", output_dir);
 
@@ -21,12 +21,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let examples = [
         ("einstein_mass_energy", r#"\[E = mc^2\]"#),
         ("pythagoras_theorem", r#"\[a^2 + b^2 = c^2\]"#),
-        ("quadratic_formula", r#"\[x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}\]"#),
+        (
+            "quadratic_formula",
+            r#"\[x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}\]"#,
+        ),
         ("golden_ratio", r#"\[\phi = \frac{1 + \sqrt{5}}{2}\]"#),
-        ("integration_example", r#"\[\int_0^{\infty} e^{-x^2} \, dx = \frac{\sqrt{\pi}}{2}\]"#),
-        ("limit_definition", r#"\[\lim_{x \to 0} \frac{\sin x}{x} = 1\]"#),
-        ("matrix_example", r#"\[\begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}\]"#),
-        ("derivative", r#"\[\frac{d}{dx} \left[ x^n \right] = n x^{n-1}\]"#),
+        (
+            "integration_example",
+            r#"\[\int_0^{\infty} e^{-x^2} \, dx = \frac{\sqrt{\pi}}{2}\]"#,
+        ),
+        (
+            "limit_definition",
+            r#"\[\lim_{x \to 0} \frac{\sin x}{x} = 1\]"#,
+        ),
+        (
+            "matrix_example",
+            r#"\[\begin{pmatrix} 1 & 2 \\ 3 & 4 \end{pmatrix}\]"#,
+        ),
+        (
+            "derivative",
+            r#"\[\frac{d}{dx} \left[ x^n \right] = n x^{n-1}\]"#,
+        ),
     ];
 
     // Standard rendering configuration
@@ -62,7 +77,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("Results: {} successful, {} errors", success_count, error_count);
+    println!(
+        "Results: {} successful, {} errors",
+        success_count, error_count
+    );
     println!("Output files are in: {}/", output_dir);
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 

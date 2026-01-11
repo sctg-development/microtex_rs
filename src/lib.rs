@@ -11,9 +11,9 @@ mod ffi {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use thiserror::Error;
-use serde::{Deserialize, Serialize};
 
 // Re-export CLM helpers generated at build time
 include!(concat!(env!("OUT_DIR"), "/embedded_clms.rs"));
@@ -194,10 +194,8 @@ mod shim {
         out_len: &mut u64,
     ) -> *mut u8 {
         let mut len32: std::os::raw::c_ulong = 0;
-        let ptr = super::ffi::microtex_get_key_char_metrics(
-            render_ptr as *mut _,
-            &mut len32 as *mut _,
-        );
+        let ptr =
+            super::ffi::microtex_get_key_char_metrics(render_ptr as *mut _, &mut len32 as *mut _);
         *out_len = len32 as u64;
         ptr
     }
@@ -687,19 +685,19 @@ impl RenderResult {
 pub struct KeyCharMetrics {
     /// Heights of individual key characters in the formula
     pub key_char_heights: Vec<i32>,
-    
+
     /// Number of key characters found
     pub key_char_count: i32,
-    
+
     /// Average height of key characters
     pub average_char_height: f32,
-    
+
     /// Maximum character height
     pub max_char_height: i32,
-    
+
     /// Minimum character height
     pub min_char_height: i32,
-    
+
     /// Total height of BOX TREE root in MicroTeX units (used for normalization)
     pub box_tree_height: f32,
 }
@@ -723,11 +721,11 @@ impl KeyCharMetrics {
             box_tree_height,
         }
     }
-    
+
     /// Parses KeyCharMetrics from a JSON string returned from C++.
     pub fn from_json(json: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let value: serde_json::Value = serde_json::from_str(json)?;
-        
+
         let key_char_heights: Vec<i32> = value
             .get("key_char_heights")
             .and_then(|v| v.as_array())
@@ -738,32 +736,32 @@ impl KeyCharMetrics {
                     .collect()
             })
             .unwrap_or_default();
-        
+
         let key_char_count = value
             .get("key_char_count")
             .and_then(|v| v.as_i64())
             .unwrap_or(0) as i32;
-        
+
         let average_char_height = value
             .get("average_char_height")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0) as f32;
-        
+
         let max_char_height = value
             .get("max_char_height")
             .and_then(|v| v.as_i64())
             .unwrap_or(0) as i32;
-        
+
         let min_char_height = value
             .get("min_char_height")
             .and_then(|v| v.as_i64())
             .unwrap_or(0) as i32;
-        
+
         let box_tree_height = value
             .get("box_tree_height")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0) as f32;
-        
+
         Ok(Self {
             key_char_heights,
             key_char_count,
@@ -809,6 +807,50 @@ pub struct MicroTex {
     _private: (),
 }
 
+/// Adds DPI metadata to an SVG string as a `data-dpi` attribute.
+///
+/// This function injects the rendering DPI value into the SVG root element
+/// as a `data-dpi` attribute. This metadata is useful for downstream processors
+/// that need to know the DPI at which the SVG was rendered, particularly when
+/// converting to other formats (e.g., PDF) where proper sizing depends on
+/// knowing the original DPI.
+///
+/// # Arguments
+///
+/// * `svg` - The SVG content as a string
+/// * `dpi` - The DPI value to embed (typically 720 for MicroTeX)
+///
+/// # Returns
+///
+/// A modified SVG string with the `data-dpi` attribute added to the `<svg>` element.
+/// If the SVG doesn't contain an `<svg` opening tag, the original string is returned unchanged.
+///
+/// # Example
+///
+/// ```rust
+/// use microtex_rs::add_dpi_to_svg;
+///
+/// let svg = r#"<svg width="100" height="50" xmlns="http://www.w3.org/2000/svg"></svg>"#;
+/// let dpi = 720;
+/// let modified = add_dpi_to_svg(svg, dpi);
+/// assert!(modified.contains(r#"data-dpi="720""#));
+/// ```
+pub fn add_dpi_to_svg(svg: &str, dpi: i32) -> String {
+    // Find the opening <svg tag
+    if let Some(svg_start) = svg.find("<svg") {
+        if let Some(close_bracket) = svg[svg_start..].find('>') {
+            let insert_pos = svg_start + close_bracket;
+            let mut result = String::with_capacity(svg.len() + 20);
+            result.push_str(&svg[..insert_pos]);
+            result.push_str(&format!(r#" data-dpi="{}""#, dpi));
+            result.push_str(&svg[insert_pos..]);
+            return result;
+        }
+    }
+    // If no <svg tag found or malformed, return original
+    svg.to_string()
+}
+
 impl MicroTex {
     /// Creates a new MicroTeX renderer instance with embedded fonts.
     ///
@@ -818,6 +860,7 @@ impl MicroTex {
     ///
     /// # Errors
     ///
+
     /// Returns [`RenderError::InitializationFailed`] if the font metadata
     /// cannot be loaded or the MicroTeX library initialization fails.
     ///
@@ -941,7 +984,10 @@ impl MicroTex {
 
             // Convert the buffer to a Rust string
             let svg_slice = std::slice::from_raw_parts(out_buf as *const u8, out_len as usize);
-            let svg_string = String::from_utf8(svg_slice.to_vec())?;
+            let mut svg_string = String::from_utf8(svg_slice.to_vec())?;
+
+            // Add DPI metadata to SVG
+            svg_string = add_dpi_to_svg(&svg_string, config.dpi);
 
             // Clean up
             shim::microtex_free_buffer(out_buf);
@@ -1028,11 +1074,14 @@ impl MicroTex {
                 .map_err(|e| RenderError::ParseJsonFailed(e.to_string()))?;
 
             // Extract SVG content
-            let svg = json_value
+            let mut svg = json_value
                 .get("svg")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| RenderError::ParseJsonFailed("missing 'svg' field".to_string()))?
                 .to_string();
+
+            // Add DPI metadata to SVG
+            svg = add_dpi_to_svg(&svg, config.dpi);
 
             // Extract metrics
             let metrics_obj = json_value
@@ -1109,7 +1158,9 @@ impl MicroTex {
 ///
 /// Returns [`RenderError`] if the rendering operation fails or the
 /// JSON parsing fails.
-pub fn get_key_char_metrics(render_ptr: *mut std::ffi::c_void) -> Result<KeyCharMetrics, RenderError> {
+pub fn get_key_char_metrics(
+    render_ptr: *mut std::ffi::c_void,
+) -> Result<KeyCharMetrics, RenderError> {
     if render_ptr.is_null() {
         return Err(RenderError::ParseRenderFailed);
     }
@@ -1469,5 +1520,57 @@ mod tests {
         assert_eq!(result.svg, "<svg>test</svg>");
         assert_eq!(result.metrics.width, 100);
         assert_eq!(result.metrics.height, 50);
+    }
+
+    #[test]
+    fn test_add_dpi_to_svg_simple() {
+        let svg = r#"<svg width="100" height="50" xmlns="http://www.w3.org/2000/svg"></svg>"#;
+        let result = add_dpi_to_svg(svg, 720);
+        assert!(result.contains(r#"data-dpi="720""#));
+        assert!(result.contains(r#"width="100""#));
+        assert!(result.contains(r#"height="50""#));
+    }
+
+    #[test]
+    fn test_add_dpi_to_svg_with_namespace() {
+        let svg =
+            r#"<svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="120" height="60">"#;
+        let result = add_dpi_to_svg(svg, 300);
+        assert!(result.contains(r#"data-dpi="300""#));
+        assert!(result.starts_with("<svg xmlns="));
+    }
+
+    #[test]
+    fn test_add_dpi_to_svg_different_dpi_values() {
+        let svg = r#"<svg viewBox="0 0 100 100">"#;
+        let result_300 = add_dpi_to_svg(svg, 300);
+        let result_720 = add_dpi_to_svg(svg, 720);
+
+        assert!(result_300.contains(r#"data-dpi="300""#));
+        assert!(result_720.contains(r#"data-dpi="720""#));
+    }
+
+    #[test]
+    fn test_add_dpi_to_svg_no_svg_tag() {
+        let svg = r#"<div>Not an SVG</div>"#;
+        let result = add_dpi_to_svg(svg, 720);
+        // Should return original string unchanged
+        assert_eq!(result, svg);
+    }
+
+    #[test]
+    fn test_add_dpi_to_svg_malformed() {
+        let svg = r#"<svg no closing bracket here"#;
+        let result = add_dpi_to_svg(svg, 720);
+        // Should return original string unchanged
+        assert_eq!(result, svg);
+    }
+
+    #[test]
+    fn test_add_dpi_to_svg_preserves_content() {
+        let svg = r#"<svg><circle cx="50" cy="50" r="40"/></svg>"#;
+        let result = add_dpi_to_svg(svg, 720);
+        assert!(result.contains(r#"<circle cx="50" cy="50" r="40"/></svg>"#));
+        assert!(result.contains(r#"data-dpi="720""#));
     }
 }

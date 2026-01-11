@@ -13,7 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = MicroTex::new()?;
 
     // Create output directory
-    let output_dir = "svg_output/formula_examples";
+    let output_dir = "examples/svg_output";
     fs::create_dir_all(output_dir)?;
     println!("Output directory: {}", output_dir);
 

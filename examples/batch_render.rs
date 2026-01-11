@@ -12,42 +12,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let renderer = MicroTex::new()?;
 
     // Create output directory
-    fs::create_dir_all("batch_output")?;
+    fs::create_dir_all("examples/batch_output")?;
 
     // Different configurations for different purposes
     let configs = [
-        ("screen", RenderConfig {
-            dpi: 96,
-            line_width: 12.0,
-            line_height: 12.0 / 3.0,
-            text_color: 0xff000000,
-            render_glyph_use_path: false,
-            ..Default::default()
-        }),
-        ("print_quality", RenderConfig {
-            dpi: 300,
-            line_width: 20.0,
-            line_height: 20.0 / 3.0,
-            text_color: 0xff000000,
-            render_glyph_use_path: true,
-            ..Default::default()
-        }),
-        ("high_dpi", RenderConfig {
-            dpi: 1440,
-            line_width: 40.0,
-            line_height: 40.0 / 3.0,
-            text_color: 0xff000000,
-            render_glyph_use_path: true,
-            ..Default::default()
-        }),
-        ("inverted_colors", RenderConfig {
-            dpi: 720,
-            line_width: 20.0,
-            line_height: 20.0 / 3.0,
-            text_color: 0xffffffff, // white text
-            render_glyph_use_path: true,
-            ..Default::default()
-        }),
+        (
+            "screen",
+            RenderConfig {
+                dpi: 96,
+                line_width: 12.0,
+                line_height: 12.0 / 3.0,
+                text_color: 0xff000000,
+                render_glyph_use_path: false,
+                ..Default::default()
+            },
+        ),
+        (
+            "print_quality",
+            RenderConfig {
+                dpi: 300,
+                line_width: 20.0,
+                line_height: 20.0 / 3.0,
+                text_color: 0xff000000,
+                render_glyph_use_path: true,
+                ..Default::default()
+            },
+        ),
+        (
+            "high_dpi",
+            RenderConfig {
+                dpi: 1440,
+                line_width: 40.0,
+                line_height: 40.0 / 3.0,
+                text_color: 0xff000000,
+                render_glyph_use_path: true,
+                ..Default::default()
+            },
+        ),
+        (
+            "inverted_colors",
+            RenderConfig {
+                dpi: 720,
+                line_width: 20.0,
+                line_height: 20.0 / 3.0,
+                text_color: 0xffffffff, // white text
+                render_glyph_use_path: true,
+                ..Default::default()
+            },
+        ),
     ];
 
     let latex = r#"
@@ -59,7 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nRendering formula with different configurations:\n");
 
     for (config_name, config) in &configs {
-        let filename = format!("batch_output/basel_problem_{}.svg", config_name);
+        let filename = format!("examples/batch_output/basel_problem_{}.svg", config_name);
 
         print!("Rendering with {} config ... ", config_name);
 
@@ -77,7 +89,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Also demonstrate rendering a list of formulas
     println!("\n✓ Batch rendering complete!");
-    println!("Output files: batch_output/");
+    println!("Output files: examples/batch_output/");
 
     Ok(())
 }
