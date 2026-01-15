@@ -13,6 +13,7 @@ mod ffi {
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::os::raw::c_char;
 use thiserror::Error;
 
 // Re-export CLM helpers generated at build time
@@ -73,6 +74,7 @@ pub mod test_control {
 /// Shim layer to wrap FFI calls and allow test-controlled behavior.
 mod shim {
     use std::ffi::c_void;
+    use std::os::raw::c_char;
 
     // Non-test shim: convert Rust u64 length to the C `unsigned long` width
     // expected by the generated bindings. On Windows `unsigned long` is 32-bit,
@@ -90,7 +92,7 @@ mod shim {
     }
 
     #[cfg(not(test))]
-    pub unsafe fn microtex_set_default_main_font(ptr: *const i8) {
+    pub unsafe fn microtex_set_default_main_font(ptr: *const c_char) {
         super::ffi::microtex_setDefaultMainFont(ptr as *const _);
     }
 
@@ -106,7 +108,7 @@ mod shim {
 
     #[cfg(not(test))]
     pub unsafe fn microtex_parse_render(
-        src: *const i8,
+        src: *const c_char,
         dpi: i32,
         line_width: f32,
         line_height: f32,
@@ -220,6 +222,7 @@ mod shim {
     #[cfg(test)]
     mod test_impl {
         use std::ffi::c_void;
+        use std::os::raw::c_char;
         use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
         use std::sync::Mutex;
 
@@ -257,7 +260,7 @@ mod shim {
             }
         }
 
-        pub unsafe fn microtex_set_default_main_font(_ptr: *const i8) {
+        pub unsafe fn microtex_set_default_main_font(_ptr: *const c_char) {
             // noop in tests
         }
 
@@ -270,7 +273,7 @@ mod shim {
         }
 
         pub unsafe fn microtex_parse_render(
-            _src: *const i8,
+            _src: *const c_char,
             _dpi: i32,
             _line_width: f32,
             _line_height: f32,
@@ -393,7 +396,7 @@ mod shim {
         test_impl::microtex_init(len, ptr)
     }
     #[cfg(test)]
-    pub unsafe fn microtex_set_default_main_font(ptr: *const i8) {
+    pub unsafe fn microtex_set_default_main_font(ptr: *const c_char) {
         test_impl::microtex_set_default_main_font(ptr)
     }
     #[cfg(test)]
@@ -406,7 +409,7 @@ mod shim {
     }
     #[cfg(test)]
     pub unsafe fn microtex_parse_render(
-        src: *const i8,
+        src: *const c_char,
         dpi: i32,
         line_width: f32,
         line_height: f32,
@@ -1256,7 +1259,7 @@ impl MicroTex {
             let default_font = std::ffi::CStr::from_bytes_with_nul(b"Serif\0")
                 .unwrap()
                 .as_ptr();
-            shim::microtex_set_default_main_font(default_font as *const i8);
+            shim::microtex_set_default_main_font(default_font as *const c_char);
             shim::microtex_set_render_glyph_use_path(true);
 
             // Important: release the font metadata after initialization

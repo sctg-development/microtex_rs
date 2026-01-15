@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS builder
 
 LABEL maintainer="MicroTeX Rust Project"
 LABEL description="Build and test MicroTeX Rust bindings on Ubuntu 24.04 LTS"
@@ -93,13 +93,23 @@ RUN echo "=== Building documentation ===" && \
 # Build release version
 RUN echo "=== Build Release ===" && \
     cargo build --all-features --release --verbose 
-
+# Create .deb package
+RUN cargo install --locked cargo-deb && \
+    # Try to create package without rebuilding; fall back to rebuilding if necessary
+    (cargo deb --no-build || cargo deb) && \
+    ls -l target/debian || true
 # Display final status
 RUN echo "=== Build Complete ===" && \
     ls -lh target/debug/microtex target/debug/examples/ 2>/dev/null || echo "Binaries location may vary" && \
     echo "\n=== Project artifacts ===" && \
     find target/debug -maxdepth 1 -type f -executable 2>/dev/null | head -10 || echo "No executables found in expected location"
 
+FROM ubuntu:24.04 AS ubuntu24-runner
+RUN apt-get update && apt-get install -y --no-install-recommends libpangocairo-1.0-0
+# Copy release build from builder stage
+COPY --from=builder /workspace/target/release/microtex /usr/local/bin/microtex
+RUN mkdir -p /out
+COPY --from=builder /workspace/target/debian/*.deb /out/
 # Set entrypoint to the CLI
-ENTRYPOINT ["./target/release/microtex"]
+ENTRYPOINT ["/usr/local/bin/microtex"]
 CMD ["--help"]
