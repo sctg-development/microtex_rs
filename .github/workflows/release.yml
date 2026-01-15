@@ -1,233 +1,228 @@
 name: Release
 
 on:
-    workflow_dispatch: {}
-    push:
-        tags: ["v*.*.*", "v*"]
+  workflow_dispatch: {}
+  push:
+    tags: ["v*.*.*", "v*"]
 
 permissions:
-    contents: write
+  contents: write
+  id-token: write
 
 jobs:
-    build:
-        name: Build for ${{ matrix.name }}
-        runs-on: ${{ matrix.runner }}
-        strategy:
-            matrix:
-                include:
-                    - name: ubuntu-24.04-amd64
-                      runner: ubuntu-24.04
-                      arch: amd64
-                      target: x86_64-unknown-linux-gnu
-                      ext: tar.gz
-                    - name: ubuntu-24.04-arm64
-                      runner: ubuntu-24.04-arm
-                      arch: arm64
-                      target: aarch64-unknown-linux-gnu
-                      ext: tar.gz
-                    - name: windows-amd64
-                      runner: windows-latest
-                      arch: amd64
-                      target: x86_64-pc-windows-msvc
-                      ext: zip
-                    - name: macos-amd64
-                      runner: macos-15-intel
-                      arch: amd64
-                      target: x86_64-apple-darwin
-                      ext: tar.gz
-                    - name: macos-arm64
-                      runner: macos-latest
-                      arch: arm64
-                      target: aarch64-apple-darwin
-                      ext: tar.gz
-        steps:
-            - uses: actions/checkout@v6
+  build:
+    name: Build for ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - name: ubuntu-24.04-amd64
+            runner: ubuntu-24.04
+            arch: amd64
+            target: x86_64-unknown-linux-gnu
+            ext: tar.gz
+          - name: ubuntu-24.04-arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+            target: aarch64-unknown-linux-gnu
+            ext: tar.gz
+          - name: windows-amd64
+            runner: windows-latest
+            arch: amd64
+            target: x86_64-pc-windows-msvc
+            ext: zip
+          - name: macos-amd64
+            runner: macos-15-intel
+            arch: amd64
+            target: x86_64-apple-darwin
+            ext: tar.gz
+          - name: macos-arm64
+            runner: macos-latest
+            arch: arm64
+            target: aarch64-apple-darwin
+            ext: tar.gz
+    steps:
+      - uses: actions/checkout@v6
 
-            - name: Cache Cargo registry and index
-              uses: actions/cache@v5
-              with:
-                  path: |
-                      ~/.cargo/registry
-                      ~/.cargo/git
-                  key: ${{ runner.os }}-cargo-registry-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-                  restore-keys: |
-                      ${{ runner.os }}-cargo-registry-${{ matrix.target }}-
-                      ${{ runner.os }}-cargo-registry-
+      - name: Cache Cargo registry and index
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-registry-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-${{ matrix.target }}-
+            ${{ runner.os }}-cargo-registry-
 
-            - name: Cache cargo target
-              uses: actions/cache@v5
-              with:
-                  path: target
-                  key: ${{ runner.os }}-cargo-target-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
-                  restore-keys: |
-                      ${{ runner.os }}-cargo-target-${{ matrix.target }}-
-                      ${{ runner.os }}-cargo-target-
+      - name: Cache cargo target
+        uses: actions/cache@v5
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-${{ matrix.target }}-
+            ${{ runner.os }}-cargo-target-
 
-            - name: Install system deps (Ubuntu)
-              if: matrix.runner == 'ubuntu-24.04' || matrix.runner == 'ubuntu-24.04-arm'
-              run: |
-                  sudo apt-get update
-                  sudo apt-get install -y libcairo2-dev libpango1.0-dev libfontconfig1-dev pkg-config
+      - name: Install system deps (Ubuntu)
+        if: matrix.runner == 'ubuntu-24.04' || matrix.runner == 'ubuntu-24.04-arm'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2-dev libpango1.0-dev libfontconfig1-dev pkg-config
 
-            - name: Install system deps (macOS amd64)
-              if: matrix.runner == 'macos-latest' && matrix.arch == 'amd64'
-              shell: bash
-              run: |
-                  # Use x86_64 Homebrew where appropriate
-                  arch -x86_64 /usr/local/bin/brew list >/dev/null 2>&1 || true
-                  arch -x86_64 /usr/local/bin/brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
+      - name: Install system deps (macOS amd64)
+        if: matrix.runner == 'macos-latest' && matrix.arch == 'amd64'
+        shell: bash
+        run: |
+          # Use x86_64 Homebrew where appropriate
+          arch -x86_64 /usr/local/bin/brew list >/dev/null 2>&1 || true
+          arch -x86_64 /usr/local/bin/brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
 
-            - name: Install system deps (macOS arm64)
-              if: matrix.runner == 'macos-latest' && matrix.arch == 'arm64'
-              shell: bash
-              run: |
-                  brew update || true
-                  brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
+      - name: Install system deps (macOS arm64)
+        if: matrix.runner == 'macos-latest' && matrix.arch == 'arm64'
+        shell: bash
+        run: |
+          brew update || true
+          brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
 
-            - name: Cache vcpkg (Windows)
-              if: matrix.runner == 'windows-latest'
-              uses: actions/cache@v5
-              with:
-                  path: |
-                      C:/vcpkg/installed
-                      C:/vcpkg/downloads
-                      C:/vcpkg/packages
-                  key: ${{ runner.os }}-vcpkg-${{ matrix.target }}-${{ hashFiles('**/vcpkg.json') }}
-                  restore-keys: |
-                      ${{ runner.os }}-vcpkg-${{ matrix.target }}-
-                      ${{ runner.os }}-vcpkg-
+      - name: Cache vcpkg (Windows)
+        if: matrix.runner == 'windows-latest'
+        uses: actions/cache@v5
+        with:
+          path: |
+            C:/vcpkg/installed
+            C:/vcpkg/downloads
+            C:/vcpkg/packages
+          key: ${{ runner.os }}-vcpkg-${{ matrix.target }}-${{ hashFiles('**/vcpkg.json') }}
+          restore-keys: |
+            ${{ runner.os }}-vcpkg-${{ matrix.target }}-
+            ${{ runner.os }}-vcpkg-
 
-            - name: Install system deps (Windows)
-              if: matrix.runner == 'windows-latest'
-              shell: bash
-              run: |
-                  if [ ! -d "C:/vcpkg" ]; then
-                    git clone https://github.com/Microsoft/vcpkg.git C:/vcpkg
-                    C:/vcpkg/bootstrap-vcpkg.bat
-                  fi
-                  C:/vcpkg/vcpkg.exe install cairo:x64-windows pango:x64-windows fontconfig:x64-windows pkgconf:x64-windows libpng:x64-windows freetype:x64-windows harfbuzz:x64-windows pixman:x64-windows libffi:x64-windows pcre2:x64-windows zlib:x64-windows bzip2:x64-windows lzo:x64-windows || true
+      - name: Install system deps (Windows)
+        if: matrix.runner == 'windows-latest'
+        shell: bash
+        run: |
+          if [ ! -d "C:/vcpkg" ]; then
+            git clone https://github.com/Microsoft/vcpkg.git C:/vcpkg
+            C:/vcpkg/bootstrap-vcpkg.bat
+          fi
+          C:/vcpkg/vcpkg.exe install cairo:x64-windows pango:x64-windows fontconfig:x64-windows pkgconf:x64-windows libpng:x64-windows freetype:x64-windows harfbuzz:x64-windows pixman:x64-windows libffi:x64-windows pcre2:x64-windows zlib:x64-windows bzip2:x64-windows lzo:x64-windows || true
 
-            - name: Install meson and ninja (non-Windows)
-              if: matrix.runner != 'windows-latest'
-              run: python3 -m pip install --break-system-packages meson ninja
+      - name: Install meson and ninja (non-Windows)
+        if: matrix.runner != 'windows-latest'
+        run: python3 -m pip install --break-system-packages meson ninja
 
-            - name: Install Rust toolchain
-              uses: actions-rs/toolchain@v1
-              with:
-                  toolchain: stable
-                  override: true
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
 
-            - name: Add target
-              run: rustup target add ${{ matrix.target }} || true
+      - name: Add target
+        run: rustup target add ${{ matrix.target }} || true
 
-            - name: Build
-              shell: bash
-              run: |
-                  set -e
-                  cargo build --workspace --all-features --release --target ${{ matrix.target }}
+      - name: Build
+        shell: bash
+        run: |
+          set -e
+          cargo build --workspace --all-features --release --target ${{ matrix.target }}
 
-            - name: Package (non-Windows)
-              if: matrix.runner != 'windows-latest'
-              shell: bash
-              run: |
-                  mkdir -p dist
-                  BIN=target/${{ matrix.target }}/release/microtex
-                  if [ ! -f "$BIN" ]; then echo "Binary not found: $BIN"; ls -la target/${{ matrix.target }}/release || true; exit 1; fi
-                  cp "$BIN" dist/microtex-${{ matrix.name }}
-                  tar -C dist -czf dist/microtex-${{ matrix.name }}.tar.gz microtex-${{ matrix.name }}
+      - name: Package (non-Windows)
+        if: matrix.runner != 'windows-latest'
+        shell: bash
+        run: |
+          mkdir -p dist
+          BIN=target/${{ matrix.target }}/release/microtex
+          if [ ! -f "$BIN" ]; then echo "Binary not found: $BIN"; ls -la target/${{ matrix.target }}/release || true; exit 1; fi
+          cp "$BIN" dist/microtex-${{ matrix.name }}
+          tar -C dist -czf dist/microtex-${{ matrix.name }}.tar.gz microtex-${{ matrix.name }}
 
-            - name: Package (Windows)
-              if: matrix.runner == 'windows-latest'
-              shell: pwsh
-              run: |
-                  New-Item -ItemType Directory -Path dist | Out-Null
-                  $bin = "target/${{ matrix.target }}/release/microtex.exe"
-                  if (-not (Test-Path $bin)) { Write-Host "Binary not found: $bin"; Get-ChildItem -Recurse target/${{ matrix.target }}/release; exit 1 }
-                  Copy-Item $bin -Destination "dist/microtex-${{ matrix.name }}.exe"
-                  Compress-Archive -Path "dist/microtex-${{ matrix.name }}.exe" -DestinationPath "dist/microtex-${{ matrix.name }}.zip"
+      - name: Package (Windows)
+        if: matrix.runner == 'windows-latest'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist | Out-Null
+          $bin = "target/${{ matrix.target }}/release/microtex.exe"
+          if (-not (Test-Path $bin)) { Write-Host "Binary not found: $bin"; Get-ChildItem -Recurse target/${{ matrix.target }}/release; exit 1 }
+          Copy-Item $bin -Destination "dist/microtex-${{ matrix.name }}.exe"
+          Compress-Archive -Path "dist/microtex-${{ matrix.name }}.exe" -DestinationPath "dist/microtex-${{ matrix.name }}.zip"
 
-            - name: Upload build artifact
-              uses: actions/upload-artifact@v6
-              with:
-                  name: ${{ matrix.name }}
-                  path: dist/*
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ matrix.name }}
+          path: dist/*
 
-    publish:
-        name: Create GitHub release
-        needs: build
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@v6
+  publish:
+    name: Create GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
 
-            - name: Download all artifacts
-              uses: actions/download-artifact@v5
-              with:
-                  path: dist
+      - name: Download all artifacts
+        uses: actions/download-artifact@v5
+        with:
+          path: dist
 
-            - name: Determine version and tag
-              id: ver
-              run: |
-                  set -e
-                  VERSION_LINE=$(grep '^version' Cargo.toml | head -n1 || true)
-                  if [ -z "$VERSION_LINE" ]; then echo "version not found in Cargo.toml"; exit 1; fi
-                  VERSION=$(echo "$VERSION_LINE" | sed -E 's/version = "([^"]+)"/\1/')
-                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then TAG="${VERSION}-nightly"; else TAG="${VERSION}"; fi
-                  echo "version=$VERSION" >> $GITHUB_OUTPUT
-                  echo "tag=$TAG" >> $GITHUB_OUTPUT
-                  echo "TAG=$TAG" >> $GITHUB_ENV
+      - name: Determine version and tag
+        id: ver
+        run: |
+          set -e
+          VERSION_LINE=$(grep '^version' Cargo.toml | head -n1 || true)
+          if [ -z "$VERSION_LINE" ]; then echo "version not found in Cargo.toml"; exit 1; fi
+          VERSION=$(echo "$VERSION_LINE" | sed -E 's/version = "([^"]+)"/\1/')
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then TAG="${VERSION}-nightly"; else TAG="${VERSION}"; fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "TAG=$TAG" >> $GITHUB_ENV
 
-            - name: Prepare release notes
-              run: |
-                  TAG=${{ env.TAG }}
-                  cat > release_notes.md <<'EOF'
-                  # microtex_rs release $TAG
+      - name: Prepare release notes
+        run: |
+          TAG=${{ env.TAG }}
+          cat > release_notes.md <<'EOF'
+          # microtex_rs release $TAG
 
-                  This release provides prebuilt `microtex_rs` executables for:
-                    - Ubuntu 24.04 (amd64 and arm64)
-                    - macOS (amd64 and arm64)
-                    - Windows (x86_64)
+          This release provides prebuilt `microtex_rs` executables for:
+            - Ubuntu 24.04 (amd64 and arm64)
+            - macOS (amd64 and arm64)
+            - Windows (x86_64)
 
-                  ## Linux (Ubuntu 24.04)
-                  Install the runtime dependencies (example):
+          ## Linux (Ubuntu 24.04)
+          Install the runtime dependencies (example):
 
-                  ```bash
-                  sudo apt-get update && sudo apt-get install -y libpangocairo-1.0-0
-                  ```
+          ```bash
+          sudo apt-get update && sudo apt-get install -y libpangocairo-1.0-0
+          ```
 
-                  Note: other dependencies required by runtime (such as libcairo, libpango, fontconfig) are dependencies of `libpangocairo-1.0-0` and will be pulled automatically on Ubuntu 24.04.
+          Note: other dependencies required by runtime (such as libcairo, libpango, fontconfig) are dependencies of `libpangocairo-1.0-0` and will be pulled automatically on Ubuntu 24.04.
 
-                  ## macOS (Homebrew)
-                  Install dependencies via Homebrew:
+          ## macOS (Homebrew)
+          Install dependencies via Homebrew:
 
-                  ```bash
-                  brew install pango cairo fontconfig pkg-config
-                  ```
+          ```bash
+          brew install pango cairo fontconfig pkg-config
+          ```
 
-                  If you use the **amd64** binary on an arm64 mac (Rosetta), you may need to install and use the x86_64 Homebrew and run with Rosetta: `arch -x86_64 <command>`.
+          If you use the **amd64** binary on an arm64 mac (Rosetta), you may need to install and use the x86_64 Homebrew and run with Rosetta: `arch -x86_64 <command>`.
 
-                  ## Windows (vcpkg / MSVC)
-                  Install dependencies using vcpkg and MSVC toolchain. Example steps:
+          ## Windows (vcpkg / MSVC)
+          Install dependencies using vcpkg and MSVC toolchain. Example steps:
 
-                  ```powershell
-                  git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
-                  C:\vcpkg\bootstrap-vcpkg.bat
-                  C:\vcpkg\vcpkg.exe install cairo:x64-windows pango:x64-windows fontconfig:x64-windows pkgconf:x64-windows
-                  ```
+          ```powershell
+          git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat
+          C:\vcpkg\vcpkg.exe install cairo:x64-windows pango:x64-windows fontconfig:x64-windows pkgconf:x64-windows
+          ```
 
-                  You will also need the MSVC runtime/redistributable appropriate for your system.
+          You will also need the MSVC runtime/redistributable appropriate for your system.
 
-                  EOF
+          EOF
 
-            - name: Authenticate gh
-              env:
-                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              run: |
-                  echo "$GITHUB_TOKEN" | gh auth login --with-token
+      - name: Create release with assets
+        run: |
+          TAG=${{ env.TAG }}
+          gh release create "$TAG" dist/* --title "microtex_rs $TAG" --notes-file release_notes.md || gh release upload "$TAG" dist/* --clobber
 
-            - name: Create release with assets
-              run: |
-                  TAG=${{ env.TAG }}
-                  gh release create "$TAG" dist/* --title "microtex_rs $TAG" --notes-file release_notes.md || gh release upload "$TAG" dist/* --clobber
-
-            - name: Show release URL
-              run: gh release view --json url --jq '.url' ${{ env.TAG }}
+      - name: Show release URL
+        run: gh release view --json url --jq '.url' ${{ env.TAG }}
