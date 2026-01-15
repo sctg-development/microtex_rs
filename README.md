@@ -19,24 +19,60 @@ Safe Rust bindings for [MicroTeX](https://github.com/NanoMichael/MicroTeX), a li
 Add to your `Cargo.toml`:
 
 ```toml
-[dependencies]
-microtex_rs = "0.1"
+[dependencies.microtex_rs]
+git = "https://github.com/sctg-development/microtex_rs"
+branch = "main"
 ```
 
 ### System Dependencies
 
-By default, `microtex_rs` will attempt to use system-installed graphics libraries:
+By default, `microtex_rs` will attempt to use system-installed graphics libraries. The CI workflow installs the following packages per-platform; install the equivalent on your system:
+
+macOS (Homebrew — ARM and Intel):
 
 ```bash
-# macOS
+# macOS (arm64 or intel)
 brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2
 
-# Ubuntu/Debian
-sudo apt-get install libcairo2-dev libpango-1.0-0 libpango1.0-dev libfontconfig1-dev pkg-config
+# If you need to build amd64 (intel) binaries on an arm64 mac, use the x86_64 Homebrew and prefix commands with Rosetta:
+# arch -x86_64 /usr/local/bin/brew install <pkg>
+```
 
-# Fedora
+Ubuntu / Debian:
+
+```bash
+sudo apt-get update && sudo apt-get install -y libcairo2-dev libpango-1.0-0 libpango1.0-dev libfontconfig1-dev pkg-config
+```
+
+Notes for CI/coverage builds: the CI sometimes also installs `pkg-config`, `libssl-dev`, `clang` and `llvm` for certain tooling (coverage, tarpaulin).
+
+Fedora:
+
+```bash
 sudo dnf install cairo-devel pango-devel fontconfig-devel pkg-config
 ```
+
+Windows (vcpkg + MSVC):
+
+```powershell
+# Example using vcpkg (run from PowerShell / Admin if needed)
+git clone https://github.com/Microsoft/vcpkg.git C:\vcpkg
+C:\vcpkg\bootstrap-vcpkg.bat
+C:\vcpkg\vcpkg.exe install cairo:x64-windows pango:x64-windows fontconfig:x64-windows pkgconf:x64-windows libpng:x64-windows freetype:x64-windows harfbuzz:x64-windows pixman:x64-windows libffi:x64-windows pcre2:x64-windows zlib:x64-windows bzip2:x64-windows lzo:x64-windows
+```
+
+Common build tools (required by the CI):
+
+```bash
+# meson and ninja (installed in CI via pip):
+python3 -m pip install --break-system-packages meson ninja
+
+# Rust toolchain (use rustup to install 'stable')
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup default stable
+```
+
+If you prefer to use vendored dependency bundles instead of system libraries, see the **Dependency Bundles** section below.
 
 ### Dependency Bundles
 
