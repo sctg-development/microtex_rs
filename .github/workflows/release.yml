@@ -220,9 +220,13 @@ jobs:
           EOF
 
       - name: Create release with assets
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           TAG=${{ env.TAG }}
           gh release create "$TAG" dist/* --title "microtex_rs $TAG" --notes-file release_notes.md || gh release upload "$TAG" dist/* --clobber
 
       - name: Show release URL
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: gh release view --json url --jq '.url' ${{ env.TAG }}
