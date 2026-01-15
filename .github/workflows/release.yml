@@ -230,8 +230,14 @@ jobs:
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             gh release create "$TAG" --title "microtex_rs $TAG" --notes-file release_notes.md || true
           fi
-          # Upload only archive files (tar.gz and zip) to avoid directories and raw binaries
-          gh release upload "$TAG" dist/*.tar.gz dist/*.zip --clobber
+          # Find and upload archive files (tar.gz and zip) recursively from dist/
+          ARCHIVES=$(find dist -type f \( -name '*.tar.gz' -o -name '*.zip' \) -print | paste -sd ' ' -)
+          if [ -z "$ARCHIVES" ]; then
+            echo "No archives found to upload"
+          else
+            echo "Uploading: $ARCHIVES"
+            gh release upload "$TAG" $ARCHIVES --clobber
+          fi
 
       - name: Show release URL
         env:
