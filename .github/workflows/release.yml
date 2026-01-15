@@ -43,6 +43,26 @@ jobs:
         steps:
             - uses: actions/checkout@v6
 
+            - name: Cache Cargo registry and index
+              uses: actions/cache@v5
+              with:
+                  path: |
+                      ~/.cargo/registry
+                      ~/.cargo/git
+                  key: ${{ runner.os }}-cargo-registry-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-registry-${{ matrix.target }}-
+                      ${{ runner.os }}-cargo-registry-
+
+            - name: Cache cargo target
+              uses: actions/cache@v5
+              with:
+                  path: target
+                  key: ${{ runner.os }}-cargo-target-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-cargo-target-${{ matrix.target }}-
+                      ${{ runner.os }}-cargo-target-
+
             - name: Install system deps (Ubuntu)
               if: matrix.runner == 'ubuntu-24.04' || matrix.runner == 'ubuntu-24.04-arm'
               run: |
@@ -63,6 +83,19 @@ jobs:
               run: |
                   brew update || true
                   brew install cairo pango fontconfig pkg-config lzo libffi zlib bzip2 graphite2 libpng freetype harfbuzz pixman pcre2 || true
+
+            - name: Cache vcpkg (Windows)
+              if: matrix.runner == 'windows-latest'
+              uses: actions/cache@v5
+              with:
+                  path: |
+                      C:/vcpkg/installed
+                      C:/vcpkg/downloads
+                      C:/vcpkg/packages
+                  key: ${{ runner.os }}-vcpkg-${{ matrix.target }}-${{ hashFiles('**/vcpkg.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-vcpkg-${{ matrix.target }}-
+                      ${{ runner.os }}-vcpkg-
 
             - name: Install system deps (Windows)
               if: matrix.runner == 'windows-latest'
