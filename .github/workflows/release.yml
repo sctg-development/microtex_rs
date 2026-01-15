@@ -224,6 +224,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
+          ls -lRa dist
           TAG=${{ env.TAG }}
           # Create the release if it doesn't exist (avoid passing assets to create to prevent directory errors)
           if ! gh release view "$TAG" >/dev/null 2>&1; then
@@ -235,4 +236,6 @@ jobs:
       - name: Show release URL
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release view --json url --jq '.url' ${{ env.TAG }}
+        shell: bash
+        run: |
+          gh release view --json url --jq '.url' ${{ env.TAG }}
