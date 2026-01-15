@@ -180,7 +180,7 @@ jobs:
       - name: Prepare release notes
         run: |
           TAG=${{ env.TAG }}
-          cat > release_notes.md <<'EOF'
+          cat > release_notes.md <<EOF
           # microtex_rs release $TAG
 
           This release provides prebuilt `microtex_rs` executables for:
