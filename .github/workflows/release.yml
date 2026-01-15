@@ -219,14 +219,20 @@ jobs:
 
           EOF
 
-      - name: Create release with assets
+      - name: Create or update release and upload assets
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -e
           TAG=${{ env.TAG }}
-          gh release create "$TAG" dist/* --title "microtex_rs $TAG" --notes-file release_notes.md || gh release upload "$TAG" dist/* --clobber
+          # Create the release if it doesn't exist (avoid passing assets to create to prevent directory errors)
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "microtex_rs $TAG" --notes-file release_notes.md || true
+          fi
+          # Upload only archive files (tar.gz and zip) to avoid directories and raw binaries
+          gh release upload "$TAG" dist/*.tar.gz dist/*.zip --clobber
 
       - name: Show release URL
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release view --json url --jq '.url' ${{ env.TAG }}
