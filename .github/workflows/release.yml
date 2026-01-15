@@ -31,7 +31,7 @@ jobs:
                       target: x86_64-pc-windows-msvc
                       ext: zip
                     - name: macos-amd64
-                      runner: macos-latest
+                      runner: macos-15-intel
                       arch: amd64
                       target: x86_64-apple-darwin
                       ext: tar.gz
